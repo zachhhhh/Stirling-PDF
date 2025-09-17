@@ -31,6 +31,8 @@ class PremiumLicenseServiceTest {
         properties.getPremium().setMaxUsers(25);
         properties.getPremium().getProFeatures().setDatabase(true);
         properties.getPremium().getProFeatures().setSsoAutoLogin(true);
+        properties.getPremium().getEnterpriseFeatures().getAudit().setEnabled(false);
+        properties.getPremium().getEnterpriseFeatures().getPersistentMetrics().setEnabled(false);
 
         PremiumLicenseService service = new PremiumLicenseService(properties);
         PremiumLicenseStatus status = service.getCurrentLicenseStatus();

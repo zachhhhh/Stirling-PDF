@@ -63,8 +63,7 @@ public class PremiumLicenseService {
         if (enterprise != null) {
             Audit audit = enterprise.getAudit();
             PersistentMetrics metrics = enterprise.getPersistentMetrics();
-            if ((audit != null && audit.isEnabled())
-                    || (metrics != null && metrics.isEnabled())) {
+            if ((audit != null && audit.isEnabled()) || (metrics != null && metrics.isEnabled())) {
                 return PremiumLicenseLevel.ENTERPRISE;
             }
         }

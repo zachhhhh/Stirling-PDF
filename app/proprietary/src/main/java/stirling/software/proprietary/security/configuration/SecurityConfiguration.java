@@ -55,6 +55,7 @@ import stirling.software.proprietary.security.service.JwtServiceInterface;
 import stirling.software.proprietary.security.service.LoginAttemptService;
 import stirling.software.proprietary.security.service.UserService;
 import stirling.software.proprietary.security.session.SessionPersistentRegistry;
+import stirling.software.proprietary.tenant.TenantContextFilter;
 
 @Slf4j
 @Configuration
@@ -80,6 +81,7 @@ public class SecurityConfiguration {
     private final GrantedAuthoritiesMapper oAuth2userAuthoritiesMapper;
     private final RelyingPartyRegistrationRepository saml2RelyingPartyRegistrations;
     private final OpenSaml4AuthenticationRequestResolver saml2AuthenticationRequestResolver;
+    private final TenantContextFilter tenantContextFilter;
 
     public SecurityConfiguration(
             PersistentLoginRepository persistentLoginRepository,
@@ -95,6 +97,7 @@ public class SecurityConfiguration {
             LoginAttemptService loginAttemptService,
             FirstLoginFilter firstLoginFilter,
             SessionPersistentRegistry sessionRegistry,
+            TenantContextFilter tenantContextFilter,
             @Autowired(required = false) GrantedAuthoritiesMapper oAuth2userAuthoritiesMapper,
             @Autowired(required = false)
                     RelyingPartyRegistrationRepository saml2RelyingPartyRegistrations,
@@ -112,6 +115,7 @@ public class SecurityConfiguration {
         this.loginAttemptService = loginAttemptService;
         this.firstLoginFilter = firstLoginFilter;
         this.sessionRegistry = sessionRegistry;
+        this.tenantContextFilter = tenantContextFilter;
         this.persistentLoginRepository = persistentLoginRepository;
         this.oAuth2userAuthoritiesMapper = oAuth2userAuthoritiesMapper;
         this.saml2RelyingPartyRegistrations = saml2RelyingPartyRegistrations;
@@ -125,6 +129,8 @@ public class SecurityConfiguration {
 
     @Bean
     public SecurityFilterChain filterChain(HttpSecurity http) throws Exception {
+        http.addFilterBefore(tenantContextFilter, UsernamePasswordAuthenticationFilter.class);
+
         if (securityProperties.getCsrfDisabled() || !loginEnabledValue) {
             http.csrf(CsrfConfigurer::disable);
         }

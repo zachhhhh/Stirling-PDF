@@ -24,6 +24,8 @@ import stirling.software.proprietary.security.database.repository.UserRepository
 import stirling.software.proprietary.security.model.User;
 import stirling.software.proprietary.security.repository.TeamRepository;
 import stirling.software.proprietary.security.service.TeamService;
+import stirling.software.proprietary.tenant.TenantContext;
+import stirling.software.proprietary.tenant.TenantContext.TenantDescriptor;
 
 @Controller
 @RequestMapping("/teams")
@@ -39,7 +41,8 @@ public class TeamWebController {
     @PreAuthorize("hasRole('ROLE_ADMIN')")
     public String listTeams(HttpServletRequest request, Model model) {
         // Get teams with user counts using a DTO projection
-        List<TeamWithUserCountDTO> allTeamsWithCounts = teamRepository.findAllTeamsWithUserCount();
+        List<TeamWithUserCountDTO> allTeamsWithCounts =
+                teamRepository.findAllTeamsWithUserCountForTenant(currentTenantId());
 
         // Filter out the Internal team
         List<TeamWithUserCountDTO> teamsWithCounts =
@@ -93,7 +96,7 @@ public class TeamWebController {
         // Get the team
         Team team =
                 teamRepository
-                        .findById(id)
+                        .findByIdForTenant(id, currentTenantId())
                         .orElseThrow(() -> new RuntimeException("Team not found"));
 
         // Prevent access to Internal team
@@ -144,5 +147,10 @@ public class TeamWebController {
         model.addAttribute("availableUsers", availableUsers);
         model.addAttribute("userLastRequest", userLastRequest);
         return "accounts/team-details";
+    }
+
+    private Long currentTenantId() {
+        TenantDescriptor descriptor = TenantContext.getTenant();
+        return descriptor != null ? descriptor.id() : null;
     }
 }

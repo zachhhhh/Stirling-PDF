@@ -1,8 +1,5 @@
 package stirling.software.common.metrics;
 
-import jakarta.servlet.http.HttpServletRequest;
-import jakarta.servlet.http.HttpServletResponse;
-
 import java.util.List;
 
 import org.springframework.stereotype.Component;
@@ -11,6 +8,9 @@ import org.springframework.web.multipart.MultipartHttpServletRequest;
 import org.springframework.web.servlet.HandlerInterceptor;
 import org.springframework.web.servlet.HandlerMapping;
 import org.springframework.web.util.UrlPathHelper;
+
+import jakarta.servlet.http.HttpServletRequest;
+import jakarta.servlet.http.HttpServletResponse;
 
 import lombok.RequiredArgsConstructor;
 
@@ -27,7 +27,8 @@ public class UsageMetricsInterceptor implements HandlerInterceptor {
     private final UsageMetricsService usageMetricsService;
 
     @Override
-    public boolean preHandle(HttpServletRequest request, HttpServletResponse response, Object handler)
+    public boolean preHandle(
+            HttpServletRequest request, HttpServletResponse response, Object handler)
             throws Exception {
         String pattern =
                 (String) request.getAttribute(HandlerMapping.BEST_MATCHING_PATTERN_ATTRIBUTE);
@@ -44,10 +45,7 @@ public class UsageMetricsInterceptor implements HandlerInterceptor {
 
     @Override
     public void afterCompletion(
-            HttpServletRequest request,
-            HttpServletResponse response,
-            Object handler,
-            Exception ex)
+            HttpServletRequest request, HttpServletResponse response, Object handler, Exception ex)
             throws Exception {
         Object op = request.getAttribute(ATTRIBUTE_OPERATION);
         if (op instanceof String operation && !operation.isBlank()) {
@@ -59,7 +57,7 @@ public class UsageMetricsInterceptor implements HandlerInterceptor {
 
     private long estimateFileCount(HttpServletRequest request) {
         if (request instanceof MultipartHttpServletRequest multipartRequest) {
-            return multipartRequest.getFileMap().values().stream()
+            return multipartRequest.getMultiFileMap().values().stream()
                     .mapToLong(this::countMultipartFiles)
                     .sum();
         }
@@ -88,7 +86,7 @@ public class UsageMetricsInterceptor implements HandlerInterceptor {
 
         // Remove file extension wildcards for clarity
         if (pattern.contains(".")) {
-            pattern = pattern.replaceAll("\\.\*", "");
+            pattern = pattern.replace(".*", "");
         }
 
         if (pattern.isBlank()) {

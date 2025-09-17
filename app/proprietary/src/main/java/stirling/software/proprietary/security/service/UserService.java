@@ -40,6 +40,7 @@ import stirling.software.proprietary.security.model.User;
 import stirling.software.proprietary.security.repository.TeamRepository;
 import stirling.software.proprietary.security.saml2.CustomSaml2AuthenticatedPrincipal;
 import stirling.software.proprietary.security.session.SessionPersistentRegistry;
+import stirling.software.proprietary.tenant.TenantContext;
 
 @Service
 @Slf4j
@@ -48,6 +49,7 @@ public class UserService implements UserServiceInterface {
 
     private final UserRepository userRepository;
     private final TeamRepository teamRepository;
+    private final TeamService teamService;
     private final AuthorityRepository authorityRepository;
 
     private final PasswordEncoder passwordEncoder;
@@ -385,7 +387,7 @@ public class UserService implements UserServiceInterface {
         }
 
         return teamRepository
-                .findById(teamId)
+                .findByIdForTenant(teamId, currentTenantId())
                 .orElseThrow(() -> new IllegalArgumentException("Invalid team ID: " + teamId));
     }
 
@@ -395,14 +397,12 @@ public class UserService implements UserServiceInterface {
      * @return The default team
      */
     private Team getDefaultTeam() {
-        return teamRepository
-                .findByName("Default")
-                .orElseGet(
-                        () -> {
-                            Team team = new Team();
-                            team.setName("Default");
-                            return teamRepository.save(team);
-                        });
+        return teamService.getOrCreateDefaultTeam();
+    }
+
+    private Long currentTenantId() {
+        TenantContext.TenantDescriptor descriptor = TenantContext.getTenant();
+        return descriptor != null ? descriptor.id() : null;
     }
 
     /**

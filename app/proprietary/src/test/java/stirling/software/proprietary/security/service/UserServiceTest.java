@@ -33,6 +33,7 @@ class UserServiceTest {
     @Mock private UserRepository userRepository;
 
     @Mock private TeamRepository teamRepository;
+    @Mock private TeamService teamService;
 
     @Mock private AuthorityRepository authorityRepository;
 
@@ -69,7 +70,7 @@ class UserServiceTest {
         String username = "testuser";
         AuthenticationType authType = AuthenticationType.WEB;
 
-        when(teamRepository.findByName("Default")).thenReturn(Optional.of(mockTeam));
+        when(teamService.getOrCreateDefaultTeam()).thenReturn(mockTeam);
         when(userRepository.save(any(User.class))).thenReturn(mockUser);
         doNothing().when(databaseService).exportDatabase();
 
@@ -90,7 +91,7 @@ class UserServiceTest {
         String encodedPassword = "encodedPassword123";
 
         when(passwordEncoder.encode(password)).thenReturn(encodedPassword);
-        when(teamRepository.findById(teamId)).thenReturn(Optional.of(mockTeam));
+        when(teamRepository.findByIdForTenant(teamId, null)).thenReturn(Optional.of(mockTeam));
         when(userRepository.save(any(User.class))).thenReturn(mockUser);
         doNothing().when(databaseService).exportDatabase();
 
@@ -100,7 +101,7 @@ class UserServiceTest {
         // Then
         assertNotNull(result);
         verify(passwordEncoder).encode(password);
-        verify(teamRepository).findById(teamId);
+        verify(teamRepository).findByIdForTenant(teamId, null);
         verify(userRepository).save(any(User.class));
         verify(databaseService).exportDatabase();
     }
@@ -150,7 +151,7 @@ class UserServiceTest {
         String username = "testuser";
         Long teamId = 1L;
 
-        when(teamRepository.findById(teamId)).thenReturn(Optional.of(mockTeam));
+        when(teamRepository.findByIdForTenant(teamId, null)).thenReturn(Optional.of(mockTeam));
         when(userRepository.save(any(User.class))).thenReturn(mockUser);
         doNothing().when(databaseService).exportDatabase();
 
@@ -171,7 +172,7 @@ class UserServiceTest {
         String emptyPassword = "";
         Long teamId = 1L;
 
-        when(teamRepository.findById(teamId)).thenReturn(Optional.of(mockTeam));
+        when(teamRepository.findByIdForTenant(teamId, null)).thenReturn(Optional.of(mockTeam));
         when(userRepository.save(any(User.class))).thenReturn(mockUser);
         doNothing().when(databaseService).exportDatabase();
 
@@ -191,7 +192,7 @@ class UserServiceTest {
         String emailUsername = "test@example.com";
         AuthenticationType authType = AuthenticationType.OAUTH2;
 
-        when(teamRepository.findByName("Default")).thenReturn(Optional.of(mockTeam));
+        when(teamService.getOrCreateDefaultTeam()).thenReturn(mockTeam);
         when(userRepository.save(any(User.class))).thenReturn(mockUser);
         doNothing().when(databaseService).exportDatabase();
 
@@ -244,7 +245,7 @@ class UserServiceTest {
         String encodedPassword = "encodedPassword123";
 
         when(passwordEncoder.encode(password)).thenReturn(encodedPassword);
-        when(teamRepository.findById(teamId)).thenReturn(Optional.of(mockTeam));
+        when(teamRepository.findByIdForTenant(teamId, null)).thenReturn(Optional.of(mockTeam));
         when(userRepository.save(any(User.class))).thenReturn(mockUser);
         doThrow(new SQLException("Database export failed")).when(databaseService).exportDatabase();
 
@@ -267,7 +268,7 @@ class UserServiceTest {
         String encodedPassword = "encodedPassword123";
 
         when(passwordEncoder.encode(password)).thenReturn(encodedPassword);
-        when(teamRepository.findById(teamId)).thenReturn(Optional.of(mockTeam));
+        when(teamRepository.findByIdForTenant(teamId, null)).thenReturn(Optional.of(mockTeam));
         when(userRepository.save(any(User.class))).thenReturn(mockUser);
         doNothing().when(databaseService).exportDatabase();
 
@@ -290,7 +291,7 @@ class UserServiceTest {
         String encodedPassword = "encodedPassword123";
 
         when(passwordEncoder.encode(password)).thenReturn(encodedPassword);
-        when(teamRepository.findById(teamId)).thenReturn(Optional.of(mockTeam));
+        when(teamRepository.findByIdForTenant(teamId, null)).thenReturn(Optional.of(mockTeam));
         when(userRepository.save(any(User.class))).thenReturn(mockUser);
         doNothing().when(databaseService).exportDatabase();
 

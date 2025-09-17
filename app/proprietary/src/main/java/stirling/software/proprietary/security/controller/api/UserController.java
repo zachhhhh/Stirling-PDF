@@ -46,6 +46,8 @@ import stirling.software.proprietary.security.saml2.CustomSaml2AuthenticatedPrin
 import stirling.software.proprietary.security.service.TeamService;
 import stirling.software.proprietary.security.service.UserService;
 import stirling.software.proprietary.security.session.SessionPersistentRegistry;
+import stirling.software.proprietary.tenant.TenantContext;
+import stirling.software.proprietary.tenant.TenantContext.TenantDescriptor;
 
 @Controller
 @Tag(name = "User", description = "User APIs")
@@ -59,6 +61,7 @@ public class UserController {
     private final SessionPersistentRegistry sessionRegistry;
     private final ApplicationProperties applicationProperties;
     private final TeamRepository teamRepository;
+    private final TeamService teamService;
     private final UserRepository userRepository;
 
     @PreAuthorize("!hasAuthority('ROLE_DEMO_USER')")
@@ -70,7 +73,7 @@ public class UserController {
             return "register";
         }
         try {
-            Team team = teamRepository.findByName(TeamService.DEFAULT_TEAM_NAME).orElse(null);
+            Team team = teamService.getOrCreateDefaultTeam();
             userService.saveUser(
                     requestModel.getUsername(),
                     requestModel.getPassword(),
@@ -257,14 +260,16 @@ public class UserController {
         // Use teamId if provided, otherwise use default team
         Long effectiveTeamId = teamId;
         if (effectiveTeamId == null) {
-            Team defaultTeam =
-                    teamRepository.findByName(TeamService.DEFAULT_TEAM_NAME).orElse(null);
+            Team defaultTeam = teamService.getOrCreateDefaultTeam();
             if (defaultTeam != null) {
                 effectiveTeamId = defaultTeam.getId();
             }
         } else {
             // Check if the selected team is Internal - prevent assigning to it
-            Team selectedTeam = teamRepository.findById(effectiveTeamId).orElse(null);
+            Team selectedTeam =
+                    teamRepository
+                            .findByIdForTenant(effectiveTeamId, currentTenantId())
+                            .orElse(null);
             if (selectedTeam != null
                     && TeamService.INTERNAL_TEAM_NAME.equals(selectedTeam.getName())) {
                 return new RedirectView(
@@ -322,7 +327,7 @@ public class UserController {
 
         // Update the team if a teamId is provided
         if (teamId != null) {
-            Team team = teamRepository.findById(teamId).orElse(null);
+            Team team = teamRepository.findByIdForTenant(teamId, currentTenantId()).orElse(null);
             if (team != null) {
                 // Prevent assigning to Internal team
                 if (TeamService.INTERNAL_TEAM_NAME.equals(team.getName())) {
@@ -449,5 +454,10 @@ public class UserController {
             return ResponseEntity.status(HttpStatus.NOT_FOUND).body("API key not found for user.");
         }
         return ResponseEntity.ok(apiKey);
+    }
+
+    private Long currentTenantId() {
+        TenantDescriptor descriptor = TenantContext.getTenant();
+        return descriptor != null ? descriptor.id() : null;
     }
 }

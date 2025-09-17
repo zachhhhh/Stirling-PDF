@@ -8,6 +8,7 @@ import java.net.HttpURLConnection;
 import java.net.URI;
 import java.net.URISyntaxException;
 import java.net.URL;
+import java.time.Duration;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Collection;
@@ -62,6 +63,7 @@ public class ApplicationProperties {
     private Mail mail = new Mail();
 
     private Premium premium = new Premium();
+    private Saas saas = new Saas();
 
     @JsonIgnore // Deprecated - completely hidden from JSON serialization
     private EnterpriseEdition enterpriseEdition = new EnterpriseEdition();
@@ -377,9 +379,15 @@ public class ApplicationProperties {
 
         @JsonIgnore
         public String getBaseTmpDir() {
-            return baseTmpDir != null && !baseTmpDir.isEmpty()
-                    ? baseTmpDir
-                    : java.lang.System.getProperty("java.io.tmpdir") + "/stirling-pdf";
+            if (baseTmpDir != null && !baseTmpDir.isEmpty()) {
+                return baseTmpDir;
+            }
+            String systemTmp = java.lang.System.getProperty("java.io.tmpdir");
+            if (systemTmp == null || systemTmp.isBlank()) {
+                return "/tmp/stirling-pdf";
+            }
+            String normalized = systemTmp.replaceAll("/+$", "");
+            return normalized + "/stirling-pdf";
         }
 
         @JsonIgnore
@@ -720,6 +728,22 @@ public class ApplicationProperties {
             public long getOcrMyPdfTimeoutMinutes() {
                 return ocrMyPdfTimeoutMinutes > 0 ? ocrMyPdfTimeoutMinutes : 30;
             }
+        }
+    }
+
+    @Data
+    public static class Saas {
+        private boolean enabled;
+        private String domain;
+        private String tenantHeader = "X-Tenant-Slug";
+        private String defaultTenantSlug = "default";
+        private String defaultPlan = "FREE";
+        private Integer defaultMonthlyOperationLimit = 1000;
+        private Integer defaultStorageLimitMb = 2048;
+        private Duration trialPeriod = Duration.ofDays(14);
+
+        public Duration getTrialPeriod() {
+            return trialPeriod == null ? Duration.ZERO : trialPeriod;
         }
     }
 }

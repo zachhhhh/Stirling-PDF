@@ -15,11 +15,15 @@ import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 
 import stirling.software.proprietary.model.Team;
+import stirling.software.proprietary.model.Tenant;
 import stirling.software.proprietary.security.config.PremiumEndpoint;
 import stirling.software.proprietary.security.database.repository.UserRepository;
 import stirling.software.proprietary.security.model.User;
 import stirling.software.proprietary.security.repository.TeamRepository;
 import stirling.software.proprietary.security.service.TeamService;
+import stirling.software.proprietary.service.TenantService;
+import stirling.software.proprietary.tenant.TenantContext;
+import stirling.software.proprietary.tenant.TenantContext.TenantDescriptor;
 
 @Controller
 @RequestMapping("/api/v1/team")
@@ -31,15 +35,18 @@ public class TeamController {
 
     private final TeamRepository teamRepository;
     private final UserRepository userRepository;
+    private final TenantService tenantService;
 
     @PreAuthorize("hasRole('ROLE_ADMIN')")
     @PostMapping("/create")
     public RedirectView createTeam(@RequestParam("name") String name) {
-        if (teamRepository.existsByNameIgnoreCase(name)) {
+        Long tenantId = currentTenantId();
+        if (teamRepository.existsByNameIgnoreCaseForTenant(name, tenantId)) {
             return new RedirectView("/teams?messageType=teamExists");
         }
         Team team = new Team();
         team.setName(name);
+        team.setTenant(resolveCurrentTenant());
         teamRepository.save(team);
         return new RedirectView("/teams?messageType=teamCreated");
     }
@@ -48,11 +55,11 @@ public class TeamController {
     @PostMapping("/rename")
     public RedirectView renameTeam(
             @RequestParam("teamId") Long teamId, @RequestParam("newName") String newName) {
-        Optional<Team> existing = teamRepository.findById(teamId);
+        Optional<Team> existing = teamRepository.findByIdForTenant(teamId, currentTenantId());
         if (existing.isEmpty()) {
             return new RedirectView("/teams?messageType=teamNotFound");
         }
-        if (teamRepository.existsByNameIgnoreCase(newName)) {
+        if (teamRepository.existsByNameIgnoreCaseForTenant(newName, currentTenantId())) {
             return new RedirectView("/teams?messageType=teamNameExists");
         }
         Team team = existing.get();
@@ -71,7 +78,7 @@ public class TeamController {
     @PostMapping("/delete")
     @Transactional
     public RedirectView deleteTeam(@RequestParam("teamId") Long teamId) {
-        Optional<Team> teamOpt = teamRepository.findById(teamId);
+        Optional<Team> teamOpt = teamRepository.findByIdForTenant(teamId, currentTenantId());
         if (teamOpt.isEmpty()) {
             return new RedirectView("/teams?messageType=teamNotFound");
         }
@@ -101,7 +108,7 @@ public class TeamController {
         // Find the team
         Team team =
                 teamRepository
-                        .findById(teamId)
+                        .findByIdForTenant(teamId, currentTenantId())
                         .orElseThrow(() -> new RuntimeException("Team not found"));
 
         // Prevent adding users to the Internal team
@@ -127,5 +134,20 @@ public class TeamController {
 
         // Redirect back to team details page
         return new RedirectView("/teams/" + teamId + "?messageType=userAdded");
+    }
+
+    private Long currentTenantId() {
+        TenantDescriptor descriptor = TenantContext.getTenant();
+        return descriptor != null ? descriptor.id() : null;
+    }
+
+    private Tenant resolveCurrentTenant() {
+        TenantDescriptor descriptor = TenantContext.getTenant();
+        if (descriptor == null) {
+            return tenantService.getOrCreateDefaultTenant();
+        }
+        return tenantService
+                .findBySlug(descriptor.slug())
+                .orElseGet(tenantService::getOrCreateDefaultTenant);
     }
 }
