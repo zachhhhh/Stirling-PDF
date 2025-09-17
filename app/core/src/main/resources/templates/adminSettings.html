@@ -29,6 +29,49 @@
             </div>
             
             <div class="data-body">
+              <div class="data-grid data-mb-3">
+                <div class="data-card" style="min-width: 260px;">
+                  <div class="data-card-header">
+                    <span class="material-symbols-rounded">verified_user</span>
+                    <span th:text="#{adminUserSettings.licenseStatus}">License Status</span>
+                  </div>
+                  <div
+                    class="data-card-body"
+                    id="license-status"
+                    th:attr="data-label-plan=#{adminUserSettings.license.plan},
+                             data-label-verification=#{adminUserSettings.license.verification},
+                             data-label-users=#{adminUserSettings.license.users},
+                             data-label-features=#{adminUserSettings.license.features},
+                             data-label-expires=#{adminUserSettings.license.expires},
+                             data-label-unverified=#{adminUserSettings.license.unverified},
+                             data-label-verified=#{adminUserSettings.license.verified},
+                             data-label-unconfigured=#{adminUserSettings.license.unconfigured},
+                             data-label-none=#{adminUserSettings.license.none},
+                             data-label-error=#{adminUserSettings.error}"
+                  >
+                    <div class="data-loading" th:text="#{adminUserSettings.loading}">Loading…</div>
+                  </div>
+                </div>
+                <div class="data-card" style="min-width: 260px;">
+                  <div class="data-card-header">
+                    <span class="material-symbols-rounded">insights</span>
+                    <span th:text="#{adminUserSettings.usageMetrics}">Usage Metrics</span>
+                  </div>
+                  <div
+                    class="data-card-body"
+                    id="usage-metrics"
+                    th:attr="data-label-total-operations=#{adminUserSettings.usage.totalOperations},
+                             data-label-total-files=#{adminUserSettings.usage.totalFiles},
+                             data-label-generated=#{adminUserSettings.usage.generated},
+                             data-label-top-operations=#{adminUserSettings.usage.topOperations},
+                             data-label-none=#{adminUserSettings.usage.none},
+                             data-label-error=#{adminUserSettings.error}"
+                  >
+                    <div class="data-loading" th:text="#{adminUserSettings.loading}">Loading…</div>
+                  </div>
+                </div>
+              </div>
+
               <!-- User Stats Banner -->
               <div class="data-panel data-mb-3" style="background-color: var(--md-sys-color-primary-container);">
                 <div class="data-body" style="padding: 1.25rem;">
@@ -357,6 +400,7 @@
         </div>
       </div>
 
+      <script th:src="@{/js/admin-analytics.js}"></script>
       <script th:inline="javascript">
         const delete_confirm_text = /*[[#{adminUserSettings.confirmDeleteUser}]]*/ 'Should the user be deleted?';
         const change_confirm_text = /*[[#{adminUserSettings.confirmChangeUserStatus}]]*/ 'Should the user be disabled/enabled?';

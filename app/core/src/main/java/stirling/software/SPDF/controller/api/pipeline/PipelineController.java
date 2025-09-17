@@ -30,6 +30,7 @@ import stirling.software.SPDF.model.PipelineConfig;
 import stirling.software.SPDF.model.PipelineOperation;
 import stirling.software.SPDF.model.PipelineResult;
 import stirling.software.SPDF.model.api.HandleDataRequest;
+import stirling.software.common.metrics.UsageMetricsService;
 import stirling.software.common.service.PostHogService;
 import stirling.software.common.util.WebResponseUtils;
 
@@ -45,6 +46,8 @@ public class PipelineController {
     private final ObjectMapper objectMapper;
 
     private final PostHogService postHogService;
+
+    private final UsageMetricsService usageMetricsService;
 
     @PostMapping(value = "/handleData", consumes = MediaType.MULTIPART_FORM_DATA_VALUE)
     public ResponseEntity<byte[]> handleData(@ModelAttribute HandleDataRequest request)
@@ -65,6 +68,10 @@ public class PipelineController {
         properties.put("fileCount", files.length);
 
         postHogService.captureEvent("pipeline_api_event", properties);
+
+        for (String operationName : operationNames) {
+            usageMetricsService.recordOperation(operationName, files.length);
+        }
 
         try {
             List<Resource> inputFiles = processor.generateInputFiles(files);
