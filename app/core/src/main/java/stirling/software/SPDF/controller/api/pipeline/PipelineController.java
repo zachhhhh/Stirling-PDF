@@ -70,7 +70,7 @@ public class PipelineController {
         postHogService.captureEvent("pipeline_api_event", properties);
 
         for (String operationName : operationNames) {
-            usageMetricsService.recordOperation(operationName, files.length);
+            usageMetricsService.recordOperation(operationName, files.length, null);
         }
 
         try {

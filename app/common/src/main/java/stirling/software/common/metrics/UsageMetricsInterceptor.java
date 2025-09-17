@@ -1,7 +1,9 @@
 package stirling.software.common.metrics;
 
 import java.util.List;
+import java.util.Optional;
 
+import org.springframework.beans.factory.ObjectProvider;
 import org.springframework.stereotype.Component;
 import org.springframework.web.multipart.MultipartFile;
 import org.springframework.web.multipart.MultipartHttpServletRequest;
@@ -14,6 +16,9 @@ import jakarta.servlet.http.HttpServletResponse;
 
 import lombok.RequiredArgsConstructor;
 
+import stirling.software.common.tenant.TenantContextSupplier;
+import stirling.software.common.tenant.TenantContextSupplier.TenantDescriptor;
+
 @Component
 @RequiredArgsConstructor
 public class UsageMetricsInterceptor implements HandlerInterceptor {
@@ -22,9 +27,13 @@ public class UsageMetricsInterceptor implements HandlerInterceptor {
             UsageMetricsInterceptor.class.getName() + ".files";
     private static final String ATTRIBUTE_OPERATION =
             UsageMetricsInterceptor.class.getName() + ".operation";
+    private static final String ATTRIBUTE_TENANT =
+            UsageMetricsInterceptor.class.getName() + ".tenant";
 
     private static final UrlPathHelper PATH_HELPER = new UrlPathHelper();
+    private static final TenantContextSupplier NOOP_SUPPLIER = Optional::empty;
     private final UsageMetricsService usageMetricsService;
+    private final ObjectProvider<TenantContextSupplier> tenantContextSupplier;
 
     @Override
     public boolean preHandle(
@@ -40,6 +49,14 @@ public class UsageMetricsInterceptor implements HandlerInterceptor {
         String operation = toOperationName(request, pattern);
         request.setAttribute(ATTRIBUTE_OPERATION, operation);
         request.setAttribute(ATTRIBUTE_FILE_COUNT, estimateFileCount(request));
+        TenantDescriptor tenant =
+                tenantContextSupplier
+                        .getIfAvailable(() -> NOOP_SUPPLIER)
+                        .currentTenant()
+                        .orElse(null);
+        if (tenant != null) {
+            request.setAttribute(ATTRIBUTE_TENANT, tenant);
+        }
         return true;
     }
 
@@ -51,7 +68,8 @@ public class UsageMetricsInterceptor implements HandlerInterceptor {
         if (op instanceof String operation && !operation.isBlank()) {
             Object filesAttr = request.getAttribute(ATTRIBUTE_FILE_COUNT);
             long files = filesAttr instanceof Number ? ((Number) filesAttr).longValue() : 0L;
-            usageMetricsService.recordOperation(operation, files);
+            TenantDescriptor tenant = (TenantDescriptor) request.getAttribute(ATTRIBUTE_TENANT);
+            usageMetricsService.recordOperation(operation, files, tenant);
         }
     }
 

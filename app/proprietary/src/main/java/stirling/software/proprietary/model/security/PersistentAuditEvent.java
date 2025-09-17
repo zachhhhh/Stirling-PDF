@@ -14,6 +14,9 @@ import lombok.*;
             @jakarta.persistence.Index(name = "idx_audit_principal", columnList = "principal"),
             @jakarta.persistence.Index(name = "idx_audit_type", columnList = "type"),
             @jakarta.persistence.Index(
+                    name = "idx_audit_tenant",
+                    columnList = "tenant_id,tenant_slug"),
+            @jakarta.persistence.Index(
                     name = "idx_audit_principal_type",
                     columnList = "principal,type"),
             @jakarta.persistence.Index(
@@ -30,6 +33,8 @@ public class PersistentAuditEvent {
     @GeneratedValue(strategy = GenerationType.IDENTITY)
     private Long id;
 
+    private Long tenantId;
+    private String tenantSlug;
     private String principal;
     private String type;
 

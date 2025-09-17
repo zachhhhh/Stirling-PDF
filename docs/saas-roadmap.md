@@ -8,6 +8,7 @@ This document captures the architectural direction and immediate follow-up work 
 - **Tenant-aware persistence** – Updated team/user flows so every query and mutation is scoped by the current tenant. Legacy data is migrated to the default tenant at startup via `TenantBootstrap`.
 - **Configuration surface** – New `saas.*` properties let operators enable SaaS mode, configure headers, and set default quotas.
 - **Admin APIs** – `/api/v1/admin/tenants` now provides CRUD operations for provisioning and maintaining tenant records.
+- **Telemetry isolation** – Usage metrics and audit logging now tag every event with the active tenant, enabling per-tenant dashboards and reliable quota enforcement.
 
 ## 2. Activation Checklist
 1. **Decide tenant resolution strategy**
@@ -19,7 +20,7 @@ This document captures the architectural direction and immediate follow-up work 
 3. **Provision tenants**
    - Use the admin API (`POST /api/v1/admin/tenants`) to create your first tenant; capture the returned ID/slug for DNS or header-based routing.
 4. **Database migration**
-   - Allow Hibernate to auto-evolve the schema, or create an explicit migration that adds `tenants` and `tenant_id` to existing tables if you manage the schema manually.
+   - Allow Hibernate to auto-evolve the schema, or create explicit migrations that add `tenants`, `tenant_id` on team/audit tables, and the new audit indexes if you manage the schema manually.
 5. **Smoke test**
    - Start the server with `saas.enabled=true`, send requests with distinct `X-Tenant-Slug` values, and confirm team/user isolation.
 

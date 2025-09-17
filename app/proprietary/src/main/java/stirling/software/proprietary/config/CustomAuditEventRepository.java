@@ -3,8 +3,10 @@ package stirling.software.proprietary.config;
 import java.time.Instant;
 import java.util.List;
 import java.util.Map;
+import java.util.Optional;
 
 import org.slf4j.MDC;
+import org.springframework.beans.factory.ObjectProvider;
 import org.springframework.boot.actuate.audit.AuditEvent;
 import org.springframework.boot.actuate.audit.AuditEventRepository;
 import org.springframework.context.annotation.Primary;
@@ -17,6 +19,7 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 
+import stirling.software.common.tenant.TenantContextSupplier;
 import stirling.software.proprietary.model.security.PersistentAuditEvent;
 import stirling.software.proprietary.repository.PersistentAuditEventRepository;
 import stirling.software.proprietary.util.SecretMasker;
@@ -27,8 +30,11 @@ import stirling.software.proprietary.util.SecretMasker;
 @Slf4j
 public class CustomAuditEventRepository implements AuditEventRepository {
 
+    private static final TenantContextSupplier NOOP_TENANT = Optional::empty;
+
     private final PersistentAuditEventRepository repo;
     private final ObjectMapper mapper;
+    private final ObjectProvider<TenantContextSupplier> tenantContextSupplier;
 
     /* ── READ side intentionally inert (endpoint disabled) ── */
     @Override
@@ -59,13 +65,20 @@ public class CustomAuditEventRepository implements AuditEventRepository {
             String auditEventData = mapper.writeValueAsString(clean);
             log.debug("AuditEvent data (JSON): {}", auditEventData);
 
-            PersistentAuditEvent ent =
+            PersistentAuditEvent.PersistentAuditEventBuilder entBuilder =
                     PersistentAuditEvent.builder()
                             .principal(ev.getPrincipal())
                             .type(ev.getType())
                             .data(auditEventData)
-                            .timestamp(ev.getTimestamp())
-                            .build();
+                            .timestamp(ev.getTimestamp());
+
+            tenantContextSupplier
+                    .getIfAvailable(() -> NOOP_TENANT)
+                    .currentTenant()
+                    .ifPresent(
+                            tenant -> entBuilder.tenantId(tenant.id()).tenantSlug(tenant.slug()));
+
+            PersistentAuditEvent ent = entBuilder.build();
             repo.save(ent);
         } catch (Exception e) {
             e.printStackTrace(); // fail-open

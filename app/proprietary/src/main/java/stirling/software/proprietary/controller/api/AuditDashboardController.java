@@ -9,6 +9,7 @@ import java.util.Arrays;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
+import java.util.Optional;
 import java.util.Set;
 import java.util.stream.Collectors;
 
@@ -17,6 +18,7 @@ import org.springframework.data.domain.Page;
 import org.springframework.data.domain.PageRequest;
 import org.springframework.data.domain.Pageable;
 import org.springframework.data.domain.Sort;
+import org.springframework.data.jpa.domain.Specification;
 import org.springframework.format.annotation.DateTimeFormat;
 import org.springframework.http.HttpHeaders;
 import org.springframework.http.MediaType;
@@ -38,6 +40,8 @@ import io.swagger.v3.oas.annotations.tags.Tag;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 
+import stirling.software.common.tenant.TenantContextSupplier;
+import stirling.software.common.tenant.TenantContextSupplier.TenantDescriptor;
 import stirling.software.proprietary.audit.AuditEventType;
 import stirling.software.proprietary.model.api.audit.AuditDataRequest;
 import stirling.software.proprietary.model.api.audit.AuditDataResponse;
@@ -59,6 +63,7 @@ public class AuditDashboardController {
 
     private final PersistentAuditEventRepository auditRepository;
     private final ObjectMapper objectMapper;
+    private final TenantContextSupplier tenantContextSupplier;
 
     /** Get audit events data for the dashboard tables. */
     @GetMapping("/data")
@@ -68,42 +73,14 @@ public class AuditDashboardController {
         Pageable pageable =
                 PageRequest.of(
                         request.getPage(), request.getSize(), Sort.by("timestamp").descending());
-        Page<PersistentAuditEvent> events;
+        Specification<PersistentAuditEvent> spec =
+                buildSpecification(
+                        request.getPrincipal(),
+                        request.getType(),
+                        request.getStartDate(),
+                        request.getEndDate());
 
-        String type = request.getType();
-        String principal = request.getPrincipal();
-        LocalDate startDate = request.getStartDate();
-        LocalDate endDate = request.getEndDate();
-
-        if (type != null && principal != null && startDate != null && endDate != null) {
-            Instant start = startDate.atStartOfDay(ZoneId.systemDefault()).toInstant();
-            Instant end = endDate.plusDays(1).atStartOfDay(ZoneId.systemDefault()).toInstant();
-            events =
-                    auditRepository.findByPrincipalAndTypeAndTimestampBetween(
-                            principal, type, start, end, pageable);
-        } else if (type != null && principal != null) {
-            events = auditRepository.findByPrincipalAndType(principal, type, pageable);
-        } else if (type != null && startDate != null && endDate != null) {
-            Instant start = startDate.atStartOfDay(ZoneId.systemDefault()).toInstant();
-            Instant end = endDate.plusDays(1).atStartOfDay(ZoneId.systemDefault()).toInstant();
-            events = auditRepository.findByTypeAndTimestampBetween(type, start, end, pageable);
-        } else if (principal != null && startDate != null && endDate != null) {
-            Instant start = startDate.atStartOfDay(ZoneId.systemDefault()).toInstant();
-            Instant end = endDate.plusDays(1).atStartOfDay(ZoneId.systemDefault()).toInstant();
-            events =
-                    auditRepository.findByPrincipalAndTimestampBetween(
-                            principal, start, end, pageable);
-        } else if (startDate != null && endDate != null) {
-            Instant start = startDate.atStartOfDay(ZoneId.systemDefault()).toInstant();
-            Instant end = endDate.plusDays(1).atStartOfDay(ZoneId.systemDefault()).toInstant();
-            events = auditRepository.findByTimestampBetween(start, end, pageable);
-        } else if (type != null) {
-            events = auditRepository.findByType(type, pageable);
-        } else if (principal != null) {
-            events = auditRepository.findByPrincipal(principal, pageable);
-        } else {
-            events = auditRepository.findAll(pageable);
-        }
+        Page<PersistentAuditEvent> events = auditRepository.findAll(spec, pageable);
 
         // Logging
         List<PersistentAuditEvent> content = events.getContent();
@@ -124,8 +101,9 @@ public class AuditDashboardController {
                     int days) {
 
         // Get events from the last X days
-        Instant startDate = Instant.now().minus(java.time.Duration.ofDays(days));
-        List<PersistentAuditEvent> events = auditRepository.findByTimestampAfter(startDate);
+        Specification<PersistentAuditEvent> spec =
+                buildSpecification(null, null, LocalDate.now().minusDays(days), LocalDate.now());
+        List<PersistentAuditEvent> events = auditRepository.findAll(spec);
 
         // Count events by type
         Map<String, Long> eventsByType =
@@ -154,6 +132,22 @@ public class AuditDashboardController {
                                         Collectors.counting()));
 
         return new AuditStatsResponse(eventsByType, eventsByPrincipal, eventsByDay, events.size());
+    }
+
+    private Specification<PersistentAuditEvent> applyTenantScope() {
+        return tenantContextSupplier.currentTenant().map(this::scopeToTenant).orElse(null);
+    }
+
+    private Specification<PersistentAuditEvent> scopeToTenant(TenantDescriptor descriptor) {
+        return (root, query, cb) -> {
+            if (descriptor.id() != null) {
+                return cb.equal(root.get("tenantId"), descriptor.id());
+            }
+            if (descriptor.slug() != null) {
+                return cb.equal(cb.lower(root.get("tenantSlug")), descriptor.slug().toLowerCase());
+            }
+            return cb.conjunction();
+        };
     }
 
     // /** Advanced statistics using repository aggregations, with explicit date range. */
@@ -202,7 +196,13 @@ public class AuditDashboardController {
     @Operation(summary = "Get all unique audit event types")
     public List<String> getAuditTypes() {
         // Get distinct event types from the database
-        List<String> dbTypes = auditRepository.findDistinctEventTypes();
+        Specification<PersistentAuditEvent> spec = buildSpecification(null, null, null, null);
+        List<String> dbTypes =
+                auditRepository.findAll(spec).stream()
+                        .map(PersistentAuditEvent::getType)
+                        .filter(java.util.Objects::nonNull)
+                        .distinct()
+                        .toList();
 
         // Include standard enum types in case they're not in the database yet
         List<String> enumTypes =
@@ -359,38 +359,62 @@ public class AuditDashboardController {
         LocalDate startDate = request.getStartDate();
         LocalDate endDate = request.getEndDate();
 
-        // Get data with same filtering as getAuditData
-        List<PersistentAuditEvent> events;
+        Specification<PersistentAuditEvent> spec =
+                buildSpecification(principal, type, startDate, endDate);
+        return auditRepository.findAll(spec);
+    }
 
-        if (type != null && principal != null && startDate != null && endDate != null) {
-            Instant start = startDate.atStartOfDay(ZoneId.systemDefault()).toInstant();
-            Instant end = endDate.plusDays(1).atStartOfDay(ZoneId.systemDefault()).toInstant();
-            events =
-                    auditRepository.findAllByPrincipalAndTypeAndTimestampBetweenForExport(
-                            principal, type, start, end);
-        } else if (type != null && principal != null) {
-            events = auditRepository.findAllByPrincipalAndTypeForExport(principal, type);
-        } else if (type != null && startDate != null && endDate != null) {
-            Instant start = startDate.atStartOfDay(ZoneId.systemDefault()).toInstant();
-            Instant end = endDate.plusDays(1).atStartOfDay(ZoneId.systemDefault()).toInstant();
-            events = auditRepository.findAllByTypeAndTimestampBetweenForExport(type, start, end);
-        } else if (principal != null && startDate != null && endDate != null) {
-            Instant start = startDate.atStartOfDay(ZoneId.systemDefault()).toInstant();
-            Instant end = endDate.plusDays(1).atStartOfDay(ZoneId.systemDefault()).toInstant();
-            events =
-                    auditRepository.findAllByPrincipalAndTimestampBetweenForExport(
-                            principal, start, end);
-        } else if (startDate != null && endDate != null) {
-            Instant start = startDate.atStartOfDay(ZoneId.systemDefault()).toInstant();
-            Instant end = endDate.plusDays(1).atStartOfDay(ZoneId.systemDefault()).toInstant();
-            events = auditRepository.findAllByTimestampBetweenForExport(start, end);
-        } else if (type != null) {
-            events = auditRepository.findByTypeForExport(type);
-        } else if (principal != null) {
-            events = auditRepository.findAllByPrincipalForExport(principal);
-        } else {
-            events = auditRepository.findAll();
+    private Specification<PersistentAuditEvent> buildSpecification(
+            String principal, String type, LocalDate startDate, LocalDate endDate) {
+        Specification<PersistentAuditEvent> spec = applyTenantScope();
+
+        if (principal != null && !principal.isBlank()) {
+            String likePrincipal = "%" + principal.toUpperCase() + "%";
+            spec =
+                    merge(
+                            spec,
+                            (root, query, cb) ->
+                                    cb.like(cb.upper(root.get("principal")), likePrincipal));
         }
-        return events;
+
+        if (type != null && !type.isBlank()) {
+            spec = merge(spec, (root, query, cb) -> cb.equal(root.get("type"), type));
+        }
+
+        if (startDate != null || endDate != null) {
+            Instant start =
+                    Optional.ofNullable(startDate)
+                            .map(d -> d.atStartOfDay(ZoneId.systemDefault()).toInstant())
+                            .orElse(Instant.EPOCH);
+            Instant end =
+                    Optional.ofNullable(endDate)
+                            .map(
+                                    d ->
+                                            d.plusDays(1)
+                                                    .atStartOfDay(ZoneId.systemDefault())
+                                                    .toInstant())
+                            .orElse(Instant.now());
+            Instant finalStart = start;
+            Instant finalEnd = end;
+            spec =
+                    merge(
+                            spec,
+                            (root, query, cb) ->
+                                    cb.between(root.get("timestamp"), finalStart, finalEnd));
+        }
+
+        return Optional.ofNullable(spec).orElse((root, query, cb) -> cb.conjunction());
+    }
+
+    private Specification<PersistentAuditEvent> merge(
+            Specification<PersistentAuditEvent> base,
+            Specification<PersistentAuditEvent> addition) {
+        if (base == null) {
+            return addition;
+        }
+        if (addition == null) {
+            return base;
+        }
+        return base.and(addition);
     }
 }
