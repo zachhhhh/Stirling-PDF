@@ -9,6 +9,7 @@ This document captures the architectural direction and immediate follow-up work 
 - **Configuration surface** – New `saas.*` properties let operators enable SaaS mode, configure headers, and set default quotas.
 - **Admin APIs** – `/api/v1/admin/tenants` now provides CRUD operations for provisioning and maintaining tenant records.
 - **Telemetry isolation** – Usage metrics and audit logging now tag every event with the active tenant, enabling per-tenant dashboards and reliable quota enforcement.
+- **Self-serve signup (beta)** – `/public/signup` accepts tenant name/email/password and provisions a tenant + first admin without operator intervention.
 
 ## 2. Activation Checklist
 1. **Decide tenant resolution strategy**
@@ -19,6 +20,7 @@ This document captures the architectural direction and immediate follow-up work 
    - Seed Stripe (or your chosen billing provider) IDs into the new `Tenant` fields once billing is wired up.
 3. **Provision tenants**
    - Use the admin API (`POST /api/v1/admin/tenants`) to create your first tenant; capture the returned ID/slug for DNS or header-based routing.
+   - Alternatively expose `/public/signup` for self-service onboarding (see TODO email verification notes below).
 4. **Database migration**
    - Allow Hibernate to auto-evolve the schema, or create explicit migrations that add `tenants`, `tenant_id` on team/audit tables, and the new audit indexes if you manage the schema manually.
 5. **Smoke test**
