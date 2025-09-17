@@ -20,5 +20,10 @@ public final class TenantContext {
         TENANT.remove();
     }
 
-    public record TenantDescriptor(Long id, String slug, String plan) {}
+    public record TenantDescriptor(
+            Long id,
+            String slug,
+            String plan,
+            Integer monthlyOperationLimit,
+            Integer storageLimitMb) {}
 }

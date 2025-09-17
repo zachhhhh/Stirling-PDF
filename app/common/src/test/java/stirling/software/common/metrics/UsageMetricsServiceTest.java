@@ -53,8 +53,8 @@ class UsageMetricsServiceTest {
 
     @Test
     void tenantIsolationProducesSeparateBuckets() {
-        var tenantA = new TenantDescriptor(1L, "tenant-a");
-        var tenantB = new TenantDescriptor(2L, "tenant-b");
+        var tenantA = new TenantDescriptor(1L, "tenant-a", null, null, null);
+        var tenantB = new TenantDescriptor(2L, "tenant-b", null, null, null);
 
         service.recordOperation("merge", 2, tenantA);
         service.recordOperation("merge", 1, tenantB);

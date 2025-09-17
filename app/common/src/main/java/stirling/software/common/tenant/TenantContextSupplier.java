@@ -12,5 +12,10 @@ public interface TenantContextSupplier {
 
     Optional<TenantDescriptor> currentTenant();
 
-    record TenantDescriptor(Long id, String slug) {}
+    record TenantDescriptor(
+            Long id,
+            String slug,
+            String plan,
+            Integer monthlyOperationLimit,
+            Integer storageLimitMb) {}
 }

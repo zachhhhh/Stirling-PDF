@@ -33,7 +33,8 @@ public class UsageMetricsService {
         private final Map<String, OperationStats> operations = new ConcurrentHashMap<>();
     }
 
-    private static final TenantDescriptor GLOBAL_TENANT = new TenantDescriptor(null, "global");
+    private static final TenantDescriptor GLOBAL_TENANT =
+            new TenantDescriptor(null, "global", null, null, null);
 
     private final Map<TenantDescriptor, TenantStats> tenantMetrics = new ConcurrentHashMap<>();
     private final AtomicLong totalOperations = new AtomicLong();

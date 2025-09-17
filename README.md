@@ -33,7 +33,7 @@ All documentation available at [https://docs.stirlingpdf.com/](https://docs.stir
 
 ## SaaS Mode (Preview)
 
-Running Stirling-PDF as a hosted service now has an experimental multi-tenant foundation. Enable it by setting `saas.enabled=true` and configuring tenant resolution headers or subdomains. Once enabled, you can provision tenants via the admin API (`/api/v1/admin/tenants`) or expose the self-serve signup endpoint (`POST /public/signup`) to let customers onboard themselves. Operational telemetry (usage metrics & audit events) is tagged per tenant to keep dashboards isolated. See [`docs/saas-roadmap.md`](docs/saas-roadmap.md) for the roadmap and activation checklist.
+Running Stirling-PDF as a hosted service now has an experimental multi-tenant foundation. Enable it by setting `saas.enabled=true` and configuring tenant resolution headers or subdomains. Once enabled, you can provision tenants via the admin API (`/api/v1/admin/tenants`) or expose the self-serve signup endpoint (`POST /public/signup`) to let customers onboard themselves. Operational telemetry (usage metrics & audit events) is tagged per tenant and tenant-level quotas (e.g. `monthlyOperationLimit`) are enforced centrally. See [`docs/saas-roadmap.md`](docs/saas-roadmap.md) for the roadmap and activation checklist.
 
 ## PDF Features
 

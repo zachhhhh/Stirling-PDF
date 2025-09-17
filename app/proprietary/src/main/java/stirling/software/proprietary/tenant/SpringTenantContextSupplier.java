@@ -15,6 +15,12 @@ public class SpringTenantContextSupplier implements TenantContextSupplier {
         if (descriptor == null) {
             return Optional.empty();
         }
-        return Optional.of(new TenantDescriptor(descriptor.id(), descriptor.slug()));
+        return Optional.of(
+                new TenantDescriptor(
+                        descriptor.id(),
+                        descriptor.slug(),
+                        descriptor.plan(),
+                        descriptor.monthlyOperationLimit(),
+                        descriptor.storageLimitMb()));
     }
 }

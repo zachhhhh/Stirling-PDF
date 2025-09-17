@@ -9,6 +9,7 @@ This document captures the architectural direction and immediate follow-up work 
 - **Configuration surface** – New `saas.*` properties let operators enable SaaS mode, configure headers, and set default quotas.
 - **Admin APIs** – `/api/v1/admin/tenants` now provides CRUD operations for provisioning and maintaining tenant records.
 - **Telemetry isolation** – Usage metrics and audit logging now tag every event with the active tenant, enabling per-tenant dashboards and reliable quota enforcement.
+- **Quota enforcement** – Each request consumes the tenant’s monthly operation allotment (`monthlyOperationLimit`), automatically returning 429 responses when limits are exceeded.
 - **Self-serve signup (beta)** – `/public/signup` accepts tenant name/email/password and provisions a tenant + first admin without operator intervention.
 
 ## 2. Activation Checklist

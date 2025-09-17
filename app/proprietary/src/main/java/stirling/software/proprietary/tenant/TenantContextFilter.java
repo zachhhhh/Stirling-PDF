@@ -28,7 +28,11 @@ public class TenantContextFilter extends OncePerRequestFilter {
         if (tenant != null) {
             TenantContext.setTenant(
                     new TenantContext.TenantDescriptor(
-                            tenant.getId(), tenant.getSlug(), tenant.getPlan().name()));
+                            tenant.getId(),
+                            tenant.getSlug(),
+                            tenant.getPlan().name(),
+                            tenant.getMonthlyOperationLimit(),
+                            tenant.getStorageLimitMb()));
             response.setHeader("X-Tenant-Resolved", tenant.getSlug());
         }
 
