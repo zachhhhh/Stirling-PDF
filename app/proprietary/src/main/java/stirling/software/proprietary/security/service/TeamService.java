@@ -8,6 +8,7 @@ import stirling.software.proprietary.model.Team;
 import stirling.software.proprietary.model.Tenant;
 import stirling.software.proprietary.security.repository.TeamRepository;
 import stirling.software.proprietary.service.TenantService;
+import stirling.software.proprietary.tenant.TenantContext;
 
 @Service
 @RequiredArgsConstructor
@@ -50,6 +51,12 @@ public class TeamService {
     }
 
     private Tenant resolveDefaultTenant() {
+        TenantContext.TenantDescriptor descriptor = TenantContext.getTenant();
+        if (descriptor != null && descriptor.id() != null) {
+            return tenantService
+                    .findById(descriptor.id())
+                    .orElseGet(tenantService::getOrCreateDefaultTenant);
+        }
         return tenantService.getOrCreateDefaultTenant();
     }
 

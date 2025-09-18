@@ -12,4 +12,6 @@ public interface TenantRepository extends JpaRepository<Tenant, Long> {
     Optional<Tenant> findBySlugIgnoreCase(String slug);
 
     boolean existsBySlugIgnoreCase(String slug);
+
+    Optional<Tenant> findByBillingCustomerId(String billingCustomerId);
 }

@@ -60,6 +60,12 @@ public class TenantUsageService {
         usageRepository.save(record);
     }
 
+    @Transactional
+    public int purgeObsoleteRecords() {
+        LocalDate currentWindow = currentWindowStart();
+        return usageRepository.deleteByWindowStartBefore(currentWindow);
+    }
+
     private LocalDate currentWindowStart() {
         Instant now = Instant.now();
         return now.atZone(ZoneOffset.UTC).toLocalDate().withDayOfMonth(1);

@@ -12,6 +12,7 @@ import stirling.software.common.configuration.interfaces.ShowAdminInterface;
 import stirling.software.common.model.ApplicationProperties;
 import stirling.software.proprietary.security.database.repository.UserRepository;
 import stirling.software.proprietary.security.model.User;
+import stirling.software.proprietary.tenant.TenantContext;
 
 @Service
 @RequiredArgsConstructor
@@ -35,7 +36,16 @@ class AppUpdateAuthService implements ShowAdminInterface {
         if ("anonymousUser".equalsIgnoreCase(authentication.getName())) {
             return !showUpdateOnlyAdmin;
         }
-        Optional<User> user = userRepository.findByUsername(authentication.getName());
+        Long tenantId = null;
+        var descriptor = TenantContext.getTenant();
+        if (descriptor != null) {
+            tenantId = descriptor.id();
+        }
+        Optional<User> user =
+                tenantId == null
+                        ? userRepository.findByUsername(authentication.getName())
+                        : userRepository.findByUsernameAndTenantId(
+                                authentication.getName(), tenantId);
         if (user.isPresent() && showUpdateOnlyAdmin) {
             return "ROLE_ADMIN".equals(user.get().getRolesAsString());
         }

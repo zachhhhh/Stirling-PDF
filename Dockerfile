@@ -1,12 +1,26 @@
-# Main stage
+ARG VERSION_TAG
+
+# Build stage – compile the Spring Boot jar
+FROM gradle:8.10.2-jdk21-alpine AS build
+WORKDIR /workspace
+
+COPY gradle gradle
+COPY gradlew gradlew
+COPY gradlew.bat gradlew.bat
+COPY settings.gradle settings.gradle
+COPY build.gradle build.gradle
+COPY gradle.properties gradle.properties
+COPY app app
+
+RUN gradle :stirling-pdf:bootJar --no-daemon -x test
+
+# Runtime stage
 FROM alpine:3.22.1@sha256:4bcff63911fcb4448bd4fdacec207030997caf25e9bea4045fa6c8c44de311d1
 
 # Copy necessary files
 COPY scripts /scripts
 COPY app/core/src/main/resources/static/fonts/*.ttf /usr/share/fonts/opentype/noto/
-COPY app/core/build/libs/*.jar app.jar
-
-ARG VERSION_TAG
+COPY --from=build /workspace/app/core/build/libs/*.jar app.jar
 
 LABEL org.opencontainers.image.title="Stirling-PDF"
 LABEL org.opencontainers.image.description="A powerful locally hosted web-based PDF manipulation tool supporting 50+ operations including merging, splitting, conversion, OCR, watermarking, and more."

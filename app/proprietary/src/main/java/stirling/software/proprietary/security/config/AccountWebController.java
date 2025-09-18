@@ -5,6 +5,7 @@ import static stirling.software.common.util.ProviderUtils.validateProvider;
 import java.time.Instant;
 import java.time.temporal.ChronoUnit;
 import java.util.Date;
+import java.util.EnumMap;
 import java.util.HashMap;
 import java.util.Iterator;
 import java.util.List;
@@ -18,9 +19,15 @@ import org.springframework.security.oauth2.core.user.OAuth2User;
 import org.springframework.stereotype.Controller;
 import org.springframework.ui.Model;
 import org.springframework.web.bind.annotation.GetMapping;
+import org.springframework.web.bind.annotation.PostMapping;
+import org.springframework.web.bind.annotation.RequestParam;
+import org.springframework.web.servlet.mvc.support.RedirectAttributes;
+import org.springframework.web.servlet.support.ServletUriComponentsBuilder;
 
 import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.ObjectMapper;
+import com.stripe.exception.StripeException;
+import com.stripe.model.checkout.Session;
 
 import io.swagger.v3.oas.annotations.tags.Tag;
 
@@ -38,6 +45,8 @@ import stirling.software.common.model.oauth2.GitHubProvider;
 import stirling.software.common.model.oauth2.GoogleProvider;
 import stirling.software.common.model.oauth2.KeycloakProvider;
 import stirling.software.proprietary.model.Team;
+import stirling.software.proprietary.model.Tenant;
+import stirling.software.proprietary.model.TenantPlan;
 import stirling.software.proprietary.security.database.repository.UserRepository;
 import stirling.software.proprietary.security.model.Authority;
 import stirling.software.proprietary.security.model.SessionEntity;
@@ -45,7 +54,13 @@ import stirling.software.proprietary.security.model.User;
 import stirling.software.proprietary.security.repository.TeamRepository;
 import stirling.software.proprietary.security.saml2.CustomSaml2AuthenticatedPrincipal;
 import stirling.software.proprietary.security.service.TeamService;
+import stirling.software.proprietary.security.service.UserService;
 import stirling.software.proprietary.security.session.SessionPersistentRegistry;
+import stirling.software.proprietary.service.PlanService;
+import stirling.software.proprietary.service.TenantService;
+import stirling.software.proprietary.service.billing.StripeBillingService;
+import stirling.software.proprietary.tenant.TenantContext;
+import stirling.software.proprietary.tenant.TenantContext.TenantDescriptor;
 
 @Controller
 @Slf4j
@@ -59,16 +74,28 @@ public class AccountWebController {
     // Assuming you have a repository for user operations
     private final UserRepository userRepository;
     private final TeamRepository teamRepository;
+    private final UserService userService;
+    private final TenantService tenantService;
+    private final PlanService planService;
+    private final StripeBillingService stripeBillingService;
 
     public AccountWebController(
             ApplicationProperties applicationProperties,
             SessionPersistentRegistry sessionPersistentRegistry,
             UserRepository userRepository,
-            TeamRepository teamRepository) {
+            TeamRepository teamRepository,
+            UserService userService,
+            TenantService tenantService,
+            PlanService planService,
+            StripeBillingService stripeBillingService) {
         this.applicationProperties = applicationProperties;
         this.sessionPersistentRegistry = sessionPersistentRegistry;
         this.userRepository = userRepository;
         this.teamRepository = teamRepository;
+        this.userService = userService;
+        this.tenantService = tenantService;
+        this.planService = planService;
+        this.stripeBillingService = stripeBillingService;
     }
 
     @GetMapping("/login")
@@ -213,7 +240,8 @@ public class AccountWebController {
     @GetMapping("/adminSettings")
     public String showAddUserForm(
             HttpServletRequest request, Model model, Authentication authentication) {
-        List<User> allUsers = userRepository.findAllWithTeam();
+        Long tenantId = currentTenantId();
+        List<User> allUsers = userRepository.findAllWithTeamForTenant(tenantId);
         Iterator<User> iterator = allUsers.iterator();
         Map<String, String> roleDetails = Role.getAllRoleDetails();
         // Map to store session information and user activity status
@@ -351,14 +379,10 @@ public class AccountWebController {
         model.addAttribute("activeUsers", activeUsers);
         model.addAttribute("disabledUsers", disabledUsers);
 
-        // Get all teams but filter out the Internal team
+        // Get all teams but filter out the Internal team and those from other tenants
         List<Team> allTeams =
-                teamRepository.findAll().stream()
-                        .filter(
-                                team ->
-                                        !stirling.software.proprietary.security.service.TeamService
-                                                .INTERNAL_TEAM_NAME
-                                                .equals(team.getName()))
+                teamRepository.findAllForTenant(tenantId).stream()
+                        .filter(team -> !TeamService.INTERNAL_TEAM_NAME.equals(team.getName()))
                         .toList();
         model.addAttribute("teams", allTeams);
 
@@ -391,7 +415,7 @@ public class AccountWebController {
             }
             if (username != null) {
                 // Fetch user details from the database
-                Optional<User> user = userRepository.findByUsernameIgnoreCaseWithSettings(username);
+                Optional<User> user = userService.findByUsernameIgnoreCaseWithSettings(username);
 
                 if (user.isEmpty()) {
                     return "redirect:/error";
@@ -424,11 +448,84 @@ public class AccountWebController {
                 model.addAttribute("settings", settingsJson);
                 model.addAttribute("changeCredsFlag", user.get().isFirstLogin());
                 model.addAttribute("currentPage", "account");
+
+                enrichPlanModel(request, model);
             }
         } else {
             return "redirect:/";
         }
         return "account";
+    }
+
+    @PreAuthorize("hasRole('ROLE_ADMIN')")
+    @PostMapping("/account/billing/checkout")
+    public String initiateBillingCheckout(
+            @RequestParam("plan") String plan,
+            HttpServletRequest request,
+            RedirectAttributes redirectAttributes) {
+        Tenant tenant = resolveActiveTenant();
+        if (tenant == null) {
+            redirectAttributes.addFlashAttribute("billingError", "Tenant context missing");
+            return "redirect:/account#billing";
+        }
+
+        TenantPlan targetPlan;
+        try {
+            targetPlan = TenantPlan.valueOf(plan.toUpperCase());
+        } catch (IllegalArgumentException ex) {
+            redirectAttributes.addFlashAttribute("billingError", "Unknown plan: " + plan);
+            return "redirect:/account#billing";
+        }
+
+        String successUrl =
+                ServletUriComponentsBuilder.fromCurrentContextPath()
+                        .path("/account")
+                        .queryParam("billing", "success")
+                        .build()
+                        .toUriString();
+        String cancelUrl =
+                ServletUriComponentsBuilder.fromCurrentContextPath()
+                        .path("/account")
+                        .queryParam("billing", "cancel")
+                        .build()
+                        .toUriString();
+
+        try {
+            Session session =
+                    stripeBillingService.createCheckoutSession(
+                            tenant, targetPlan, successUrl, cancelUrl);
+            return "redirect:" + session.getUrl();
+        } catch (StripeException | IllegalArgumentException ex) {
+            log.warn("Stripe checkout initiation failed: {}", ex.getMessage());
+            redirectAttributes.addFlashAttribute("billingError", ex.getMessage());
+            return "redirect:/account#billing";
+        }
+    }
+
+    @PreAuthorize("hasRole('ROLE_ADMIN')")
+    @PostMapping("/account/billing/portal")
+    public String openBillingPortal(RedirectAttributes redirectAttributes) {
+        Tenant tenant = resolveActiveTenant();
+        if (tenant == null) {
+            redirectAttributes.addFlashAttribute("billingError", "Tenant context missing");
+            return "redirect:/account#billing";
+        }
+
+        String returnUrl =
+                ServletUriComponentsBuilder.fromCurrentContextPath()
+                        .path("/account")
+                        .queryParam("billing", "portal")
+                        .build()
+                        .toUriString();
+
+        try {
+            var portalSession = stripeBillingService.createCustomerPortalSession(tenant, returnUrl);
+            return "redirect:" + portalSession.getUrl();
+        } catch (StripeException ex) {
+            log.warn("Stripe portal initiation failed: {}", ex.getMessage());
+            redirectAttributes.addFlashAttribute("billingError", ex.getMessage());
+            return "redirect:/account#billing";
+        }
     }
 
     @PreAuthorize("!hasAuthority('ROLE_DEMO_USER')")
@@ -443,7 +540,7 @@ public class AccountWebController {
             if (principal instanceof UserDetails detailsUser) {
                 String username = detailsUser.getUsername();
                 // Fetch user details from the database
-                Optional<User> user = userRepository.findByUsernameIgnoreCase(username);
+                Optional<User> user = userService.findByUsernameIgnoreCase(username);
                 if (user.isEmpty()) {
                     // Handle error appropriately, example redirection in case of error
                     return "redirect:/error";
@@ -475,5 +572,46 @@ public class AccountWebController {
             return "redirect:/";
         }
         return "change-creds";
+    }
+
+    private Long currentTenantId() {
+        var descriptor = TenantContext.getTenant();
+        return descriptor != null ? descriptor.id() : null;
+    }
+
+    private void enrichPlanModel(HttpServletRequest request, Model model) {
+        Long tenantId = currentTenantId();
+        if (tenantId == null) {
+            return;
+        }
+
+        Tenant tenant = tenantService.findById(tenantId).orElse(null);
+        if (tenant == null) {
+            return;
+        }
+
+        ApplicationProperties.Billing.Stripe stripe = planService.getStripeConfiguration();
+        boolean stripeConfigured =
+                stripe != null && stripe.getSecretKey() != null && !stripe.getSecretKey().isBlank();
+
+        Map<TenantPlan, PlanService.PlanDefinition> definitions = new EnumMap<>(TenantPlan.class);
+        definitions.putAll(planService.getAllPlanDefinitions());
+
+        model.addAttribute("tenant", tenant);
+        model.addAttribute(
+                "currentPlanDefinition", planService.getPlanDefinition(tenant.getPlan()));
+        model.addAttribute("planDefinitions", definitions.entrySet());
+        model.addAttribute("stripeConfigured", stripeConfigured);
+        model.addAttribute(
+                "stripePublishableKey", stripe != null ? stripe.getPublishableKey() : null);
+        model.addAttribute("billingStatus", request.getParameter("billing"));
+    }
+
+    private Tenant resolveActiveTenant() {
+        TenantDescriptor descriptor = TenantContext.getTenant();
+        if (descriptor == null || descriptor.id() == null) {
+            return null;
+        }
+        return tenantService.findById(descriptor.id()).orElse(null);
     }
 }

@@ -30,6 +30,15 @@
               <div th:if="${error}" class="alert alert-danger data-mb-3" role="alert">
                 <span th:text="${error}">Error Message</span>
               </div>
+              <div th:if="${billingStatus == 'success'}" class="alert alert-success data-mb-3">
+                <span>Subscription updated successfully.</span>
+              </div>
+              <div th:if="${billingStatus == 'cancel'}" class="alert alert-warning data-mb-3">
+                <span>Checkout was cancelled.</span>
+              </div>
+              <div th:if="${billingError}" class="alert alert-danger data-mb-3">
+                <span th:text="${billingError}">Unable to process billing request.</span>
+              </div>
               
               <!-- Admin Settings Banner (for admins only) -->
               <div th:if="${role == 'ROLE_ADMIN'}" class="data-panel data-mb-3" style="background-color: var(--md-sys-color-secondary-container);">
@@ -50,7 +59,94 @@
 				    </a>
 				  </div>
 				</div>
-				
+
+              <div th:if="${tenant != null}" class="data-section-title" id="billing">Workspace Plan</div>
+              <div th:if="${tenant != null}" class="data-panel data-mb-3">
+                <div class="data-header">
+                  <h5 class="data-title">
+                    <span class="data-icon">
+                      <span class="material-symbols-rounded">workspace_premium</span>
+                    </span>
+                    <span th:text="${tenant.plan.displayName}">Current Plan</span>
+                  </h5>
+                </div>
+                <div class="data-body">
+                  <div class="data-stats">
+                    <div class="data-stat-card">
+                      <div class="data-stat-label">Operations / Month</div>
+                      <div class="data-stat-value"
+                        th:text="${currentPlanDefinition != null && currentPlanDefinition.monthlyOperationLimit() != null ? currentPlanDefinition.monthlyOperationLimit() : 'Unlimited'}">Unlimited</div>
+                    </div>
+                    <div class="data-stat-card">
+                      <div class="data-stat-label">Storage (MB)</div>
+                      <div class="data-stat-value"
+                        th:text="${currentPlanDefinition != null && currentPlanDefinition.storageLimitMb() != null ? currentPlanDefinition.storageLimitMb() : 'Unlimited'}">Unlimited</div>
+                    </div>
+                    <div class="data-stat-card" th:if="${tenant.trialEndsAt != null}">
+                      <div class="data-stat-label">Trial Ends</div>
+                      <div class="data-stat-value" th:text="${#temporals.format(tenant.trialEndsAt, 'yyyy-MM-dd')}">2025-01-01</div>
+                    </div>
+                  </div>
+                </div>
+              </div>
+
+              <div th:if="${stripeConfigured} and #strings.contains(role, 'ROLE_ADMIN')" class="data-panel data-mb-3">
+                <div class="data-header">
+                  <h5 class="data-title">
+                    <span class="data-icon">
+                      <span class="material-symbols-rounded">payments</span>
+                    </span>
+                    <span>Manage Subscription</span>
+                  </h5>
+                </div>
+                <div class="data-body">
+                  <div class="table-responsive">
+                    <table class="data-table">
+                      <thead>
+                        <tr>
+                          <th>Plan</th>
+                          <th>Operations / Month</th>
+                          <th>Storage (MB)</th>
+                          <th>Trial</th>
+                          <th>Action</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        <tr th:each="entry : ${planDefinitions}">
+                          <td th:text="${entry.key.displayName}">Plan Name</td>
+                          <td th:text="${entry.value.monthlyOperationLimit() != null ? entry.value.monthlyOperationLimit() : 'Unlimited'}">Unlimited</td>
+                          <td th:text="${entry.value.storageLimitMb() != null ? entry.value.storageLimitMb() : 'Unlimited'}">Unlimited</td>
+                          <td th:text="${entry.value.allowTrial() ? 'Included' : 'N/A'}">Included</td>
+                          <td>
+                            <span th:if="${entry.key == tenant.plan}" class="data-status data-status-success">
+                              <span class="material-symbols-rounded">verified</span>
+                              <span>Current</span>
+                            </span>
+                            <form th:if="${entry.key != tenant.plan}" th:action="@{'/account/billing/checkout'}" method="post" style="display:inline-block;">
+                              <input type="hidden" name="plan" th:value="${entry.key.name()}" />
+                              <input type="hidden" th:name="${_csrf.parameterName}" th:value="${_csrf.token}" />
+                              <button type="submit" class="data-btn data-btn-primary">
+                                <span class="material-symbols-rounded">shopping_cart_checkout</span>
+                                <span>Choose Plan</span>
+                              </button>
+                            </form>
+                          </td>
+                        </tr>
+                      </tbody>
+                    </table>
+                  </div>
+                  <div class="data-actions data-mt-3" th:if="${tenant.billingCustomerId != null}">
+                    <form th:action="@{'/account/billing/portal'}" method="post">
+                      <input type="hidden" th:name="${_csrf.parameterName}" th:value="${_csrf.token}" />
+                      <button type="submit" class="data-btn data-btn-secondary">
+                        <span class="material-symbols-rounded">account_balance</span>
+                        <span>Open Customer Portal</span>
+                      </button>
+                    </form>
+                  </div>
+                </div>
+              </div>
+
               <!-- Account Management Buttons -->
               <th:block th:if="not ${oAuth2Login} or not ${saml2Login}">
                 <div class="data-section-title">Account Management</div>

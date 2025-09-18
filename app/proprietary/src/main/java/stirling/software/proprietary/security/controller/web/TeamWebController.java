@@ -41,8 +41,9 @@ public class TeamWebController {
     @PreAuthorize("hasRole('ROLE_ADMIN')")
     public String listTeams(HttpServletRequest request, Model model) {
         // Get teams with user counts using a DTO projection
+        Long tenantId = currentTenantId();
         List<TeamWithUserCountDTO> allTeamsWithCounts =
-                teamRepository.findAllTeamsWithUserCountForTenant(currentTenantId());
+                teamRepository.findAllTeamsWithUserCountForTenant(tenantId);
 
         // Filter out the Internal team
         List<TeamWithUserCountDTO> teamsWithCounts =
@@ -51,7 +52,8 @@ public class TeamWebController {
                         .toList();
 
         // Get the latest activity for each team
-        List<Object[]> teamActivities = sessionRepository.findLatestActivityByTeam();
+        List<Object[]> teamActivities =
+                sessionRepository.findLatestActivityByTeamForTenant(tenantId);
 
         // Convert the query results to a map for easy access in the view
         Map<Long, Date> teamLastRequest = new HashMap<>();
@@ -94,9 +96,10 @@ public class TeamWebController {
     public String viewTeamDetails(
             HttpServletRequest request, @PathVariable("id") Long id, Model model) {
         // Get the team
+        Long tenantId = currentTenantId();
         Team team =
                 teamRepository
-                        .findByIdForTenant(id, currentTenantId())
+                        .findByIdForTenant(id, tenantId)
                         .orElseThrow(() -> new RuntimeException("Team not found"));
 
         // Prevent access to Internal team
@@ -109,7 +112,7 @@ public class TeamWebController {
 
         // Get all users not in this team for the Add User to Team dropdown
         // Exclude users that are in the Internal team
-        List<User> allUsers = userRepository.findAllWithTeam();
+        List<User> allUsers = userRepository.findAllWithTeamForTenant(tenantId);
         List<User> availableUsers =
                 allUsers.stream()
                         .filter(
@@ -125,7 +128,8 @@ public class TeamWebController {
                         .toList();
 
         // Get the latest session for each user in the team
-        List<Object[]> userSessions = sessionRepository.findLatestSessionByTeamId(id);
+        List<Object[]> userSessions =
+                sessionRepository.findLatestSessionByTeamIdForTenant(id, tenantId);
 
         // Create a map of username to last request date
         Map<String, Date> userLastRequest = new HashMap<>();

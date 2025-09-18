@@ -33,7 +33,21 @@ All documentation available at [https://docs.stirlingpdf.com/](https://docs.stir
 
 ## SaaS Mode (Preview)
 
-Running Stirling-PDF as a hosted service now has an experimental multi-tenant foundation. Enable it by setting `saas.enabled=true` and configuring tenant resolution headers or subdomains. Once enabled, you can provision tenants via the admin API (`/api/v1/admin/tenants`) or expose the self-serve signup endpoint (`POST /public/signup`) to let customers onboard themselves. Operational telemetry (usage metrics & audit events) is tagged per tenant and tenant-level quotas (e.g. `monthlyOperationLimit`) are enforced centrally. See [`docs/saas-roadmap.md`](docs/saas-roadmap.md) for the roadmap and activation checklist.
+Stirling-PDF now includes foundations for running as a hosted, multi-tenant service. Set `saas.enabled=true` and configure header/subdomain tenant resolution. Once enabled you can:
+
+- Provision tenants via `POST /api/v1/admin/tenants` or let customers self-serve through `/public/signup` (rate-limited, email verification hook).
+- Enforce plan quotas—usage metrics and audit logs are tagged per tenant and throttled via the central quota service.
+- Connect billing: the new [`StripeBillingService`](app/proprietary/src/main/java/stirling/software/proprietary/service/billing/StripeBillingService.java) and [`BillingController`](app/proprietary/src/main/java/stirling/software/proprietary/security/controller/api/BillingController.java) expose checkout, customer portal, and webhook endpoints. Configure your Stripe keys under `billing.*` in `settings.yml` (see [`docs/saas-roadmap.md`](docs/saas-roadmap.md)).
+
+Check the SaaS roadmap for activation steps. The Flyway migration that provisions the SaaS signup tables lives at [`app/proprietary/src/main/resources/db/migration/V2025_02_20_01__signup_tables.sql`](app/proprietary/src/main/resources/db/migration/V2025_02_20_01__signup_tables.sql), and the roadmap still documents the manual SQL needed when upgrading existing installs.
+
+### Deployment quick links
+
+- Flyway SaaS migration: [`app/proprietary/src/main/resources/db/migration/V2025_02_20_01__signup_tables.sql`](app/proprietary/src/main/resources/db/migration/V2025_02_20_01__signup_tables.sql)
+- Manual SQL (if you manage migrations yourself): [`docs/sql/2025-02-tenant-signup.sql`](docs/sql/2025-02-tenant-signup.sql)
+- Sample SaaS settings overlay: [`docs/settings.saas-template.yml`](docs/settings.saas-template.yml)
+- Supabase deployment guide: [`docs/supabase-setup.md`](docs/supabase-setup.md)
+- Railway deployment guide: [`docs/railway-setup.md`](docs/railway-setup.md)
 
 ## PDF Features
 

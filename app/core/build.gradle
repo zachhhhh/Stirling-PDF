@@ -54,6 +54,8 @@ dependencies {
 
     implementation project(':common')
     implementation 'org.springframework.boot:spring-boot-starter-jetty'
+    implementation 'org.flywaydb:flyway-core:10.17.0'
+    implementation 'org.flywaydb:flyway-database-postgresql:10.17.0'
     implementation 'com.posthog.java:posthog:1.2.0'
     implementation 'commons-io:commons-io:2.20.0'
     implementation "org.bouncycastle:bcprov-jdk18on:$bouncycastleVersion"

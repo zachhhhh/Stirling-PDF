@@ -11,7 +11,12 @@ import lombok.*;
 import stirling.software.proprietary.security.model.User;
 
 @Entity
-@Table(name = "teams")
+@Table(
+        name = "teams",
+        uniqueConstraints =
+                @UniqueConstraint(
+                        name = "uk_team_tenant_name",
+                        columnNames = {"tenant_id", "name"}))
 @NoArgsConstructor
 @Getter
 @Setter
@@ -26,7 +31,7 @@ public class Team implements Serializable {
     @Column(name = "team_id")
     private Long id;
 
-    @Column(name = "name", unique = true, nullable = false)
+    @Column(name = "name", nullable = false)
     private String name;
 
     @ManyToOne(fetch = FetchType.LAZY)

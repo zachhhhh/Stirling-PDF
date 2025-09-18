@@ -15,10 +15,22 @@ import stirling.software.proprietary.security.model.User;
 public interface UserRepository extends JpaRepository<User, Long> {
     Optional<User> findByUsernameIgnoreCase(String username);
 
+    Optional<User> findByUsernameIgnoreCaseAndTenantId(String username, Long tenantId);
+
+    Optional<User> findByUsernameAndTenantId(String username, Long tenantId);
+
     @Query("FROM User u LEFT JOIN FETCH u.settings where upper(u.username) = upper(:username)")
     Optional<User> findByUsernameIgnoreCaseWithSettings(@Param("username") String username);
 
+    @Query(
+            "FROM User u LEFT JOIN FETCH u.settings where upper(u.username) = upper(:username)"
+                    + " AND u.tenant.id = :tenantId")
+    Optional<User> findByUsernameIgnoreCaseWithSettingsForTenant(
+            @Param("username") String username, @Param("tenantId") Long tenantId);
+
     Optional<User> findByUsername(String username);
+
+    Optional<User> findByApiKeyAndTenantId(String apiKey, Long tenantId);
 
     Optional<User> findByApiKey(String apiKey);
 
@@ -36,5 +48,21 @@ public interface UserRepository extends JpaRepository<User, Long> {
 
     long countByTeam(Team team);
 
+    long countByTenantId(Long tenantId);
+
     List<User> findAllByTeam(Team team);
+
+    List<User> findByTenantIsNull();
+
+    boolean existsByUsernameIgnoreCaseAndTenantId(String username, Long tenantId);
+
+    @Query(
+            "SELECT u FROM User u WHERE u.team IS NULL AND"
+                    + " (:tenantId IS NULL OR u.tenant.id = :tenantId)")
+    List<User> findAllWithoutTeamForTenant(@Param("tenantId") Long tenantId);
+
+    @Query(
+            "SELECT u FROM User u LEFT JOIN FETCH u.team WHERE"
+                    + " (:tenantId IS NULL OR u.tenant.id = :tenantId)")
+    List<User> findAllWithTeamForTenant(@Param("tenantId") Long tenantId);
 }

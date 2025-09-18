@@ -31,6 +31,7 @@ class TenantServiceTest {
 
     @Mock private TenantRepository tenantRepository;
     @Mock private ApplicationProperties applicationProperties;
+    @Mock private PlanService planService;
 
     @InjectMocks private TenantService tenantService;
 
@@ -42,6 +43,7 @@ class TenantServiceTest {
         saasProperties.setDefaultTenantSlug("default");
         saasProperties.setTrialPeriod(Duration.ofDays(14));
         lenient().when(applicationProperties.getSaas()).thenReturn(saasProperties);
+        lenient().doAnswer(invocation -> null).when(planService).applyPlanDefaults(any());
     }
 
     @Test

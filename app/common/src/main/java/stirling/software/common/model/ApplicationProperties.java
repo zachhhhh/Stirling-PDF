@@ -12,7 +12,9 @@ import java.time.Duration;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Collection;
+import java.util.HashMap;
 import java.util.List;
+import java.util.Map;
 
 import org.springframework.boot.context.properties.ConfigurationProperties;
 import org.springframework.context.annotation.Bean;
@@ -63,6 +65,7 @@ public class ApplicationProperties {
     private Mail mail = new Mail();
 
     private Premium premium = new Premium();
+    private Billing billing = new Billing();
     private Saas saas = new Saas();
 
     @JsonIgnore // Deprecated - completely hidden from JSON serialization
@@ -529,6 +532,9 @@ public class ApplicationProperties {
         private String username;
         @ToString.Exclude private String password;
         private String from;
+        private String fromName;
+        @ToString.Exclude private String resendApiKey;
+        private String verificationBaseUrl;
     }
 
     @Data
@@ -602,6 +608,28 @@ public class ApplicationProperties {
                 private boolean enabled;
                 private int retentionDays;
             }
+        }
+    }
+
+    @Data
+    public static class Billing {
+        private Stripe stripe = new Stripe();
+        private Map<String, Plan> plans = new HashMap<>();
+
+        @Data
+        public static class Stripe {
+            @ToString.Exclude private String secretKey;
+            @ToString.Exclude private String webhookSecret;
+            private String publishableKey;
+        }
+
+        @Data
+        public static class Plan {
+            private String priceId;
+            private Integer monthlyOperationLimit;
+            private Integer storageLimitMb;
+            private Boolean requiresPaymentMethod;
+            private Boolean allowTrial;
         }
     }
 

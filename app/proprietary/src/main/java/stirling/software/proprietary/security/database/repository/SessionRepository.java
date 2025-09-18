@@ -32,17 +32,19 @@ public interface SessionRepository extends JpaRepository<SessionEntity, String> 
 
     @Query(
             "SELECT t.id as teamId, MAX(s.lastRequest) as lastActivity "
-                    + "FROM stirling.software.proprietary.model.Team t "
+                    + "FROM Team t "
                     + "LEFT JOIN t.users u "
                     + "LEFT JOIN SessionEntity s ON u.username = s.principalName "
+                    + "WHERE (:tenantId IS NULL OR t.tenant.id = :tenantId) "
                     + "GROUP BY t.id")
-    List<Object[]> findLatestActivityByTeam();
+    List<Object[]> findLatestActivityByTeamForTenant(@Param("tenantId") Long tenantId);
 
     @Query(
             "SELECT u.username as username, MAX(s.lastRequest) as lastRequest "
-                    + "FROM stirling.software.proprietary.security.model.User u "
+                    + "FROM User u "
                     + "LEFT JOIN SessionEntity s ON u.username = s.principalName "
-                    + "WHERE u.team.id = :teamId "
+                    + "WHERE u.team.id = :teamId AND (:tenantId IS NULL OR u.tenant.id = :tenantId) "
                     + "GROUP BY u.username")
-    List<Object[]> findLatestSessionByTeamId(@Param("teamId") Long teamId);
+    List<Object[]> findLatestSessionByTeamIdForTenant(
+            @Param("teamId") Long teamId, @Param("tenantId") Long tenantId);
 }

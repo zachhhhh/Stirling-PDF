@@ -32,6 +32,7 @@ import stirling.software.common.model.enumeration.Role;
 import stirling.software.common.model.exception.UnsupportedProviderException;
 import stirling.software.common.service.UserServiceInterface;
 import stirling.software.proprietary.model.Team;
+import stirling.software.proprietary.model.Tenant;
 import stirling.software.proprietary.security.database.repository.AuthorityRepository;
 import stirling.software.proprietary.security.database.repository.UserRepository;
 import stirling.software.proprietary.security.model.AuthenticationType;
@@ -40,6 +41,7 @@ import stirling.software.proprietary.security.model.User;
 import stirling.software.proprietary.security.repository.TeamRepository;
 import stirling.software.proprietary.security.saml2.CustomSaml2AuthenticatedPrincipal;
 import stirling.software.proprietary.security.session.SessionPersistentRegistry;
+import stirling.software.proprietary.service.TenantService;
 import stirling.software.proprietary.tenant.TenantContext;
 
 @Service
@@ -50,6 +52,7 @@ public class UserService implements UserServiceInterface {
     private final UserRepository userRepository;
     private final TeamRepository teamRepository;
     private final TeamService teamService;
+    private final TenantService tenantService;
     private final AuthorityRepository authorityRepository;
 
     private final PasswordEncoder passwordEncoder;
@@ -130,20 +133,23 @@ public class UserService implements UserServiceInterface {
     }
 
     public boolean isValidApiKey(String apiKey) {
-        return userRepository.findByApiKey(apiKey).isPresent();
+        return findByApiKeyScoped(apiKey).isPresent();
     }
 
     public Optional<User> getUserByApiKey(String apiKey) {
-        return userRepository.findByApiKey(apiKey);
+        return findByApiKeyScoped(apiKey);
     }
 
     public Optional<User> loadUserByApiKey(String apiKey) {
-        Optional<User> user = userRepository.findByApiKey(apiKey);
-        if (user.isPresent()) {
-            return user;
+        return findByApiKeyScoped(apiKey);
+    }
+
+    private Optional<User> findByApiKeyScoped(String apiKey) {
+        Long tenantId = currentTenantId();
+        if (tenantId == null) {
+            return userRepository.findByApiKey(apiKey);
         }
-        // or throw an exception
-        return null;
+        return userRepository.findByApiKeyAndTenantId(apiKey, tenantId);
     }
 
     public boolean validateApiKeyForUser(String username, String apiKey) {
@@ -279,8 +285,16 @@ public class UserService implements UserServiceInterface {
         return findByUsernameIgnoreCase(username).isPresent();
     }
 
+    public boolean usernameExistsIgnoreCaseAcrossTenants(String username) {
+        return userRepository.findByUsernameIgnoreCase(username).isPresent();
+    }
+
     public boolean hasUsers() {
-        long userCount = userRepository.count();
+        Long tenantId = currentTenantId();
+        long userCount =
+                tenantId == null
+                        ? userRepository.count()
+                        : userRepository.countByTenantId(tenantId);
         if (findByUsernameIgnoreCase(Role.INTERNAL_API_USER.getRoleId()).isPresent()) {
             userCount -= 1;
         }
@@ -305,15 +319,27 @@ public class UserService implements UserServiceInterface {
     }
 
     public Optional<User> findByUsername(String username) {
-        return userRepository.findByUsername(username);
+        Long tenantId = currentTenantId();
+        if (tenantId == null) {
+            return userRepository.findByUsername(username);
+        }
+        return userRepository.findByUsernameAndTenantId(username, tenantId);
     }
 
     public Optional<User> findByUsernameIgnoreCase(String username) {
-        return userRepository.findByUsernameIgnoreCase(username);
+        Long tenantId = currentTenantId();
+        if (tenantId == null) {
+            return userRepository.findByUsernameIgnoreCase(username);
+        }
+        return userRepository.findByUsernameIgnoreCaseAndTenantId(username, tenantId);
     }
 
     public Optional<User> findByUsernameIgnoreCaseWithSettings(String username) {
-        return userRepository.findByUsernameIgnoreCaseWithSettings(username);
+        Long tenantId = currentTenantId();
+        if (tenantId == null) {
+            return userRepository.findByUsernameIgnoreCaseWithSettings(username);
+        }
+        return userRepository.findByUsernameIgnoreCaseWithSettingsForTenant(username, tenantId);
     }
 
     public Authority findRole(User user) {
@@ -361,10 +387,9 @@ public class UserService implements UserServiceInterface {
 
     public void changeUserTeam(User user, Team team)
             throws SQLException, UnsupportedProviderException {
-        if (team == null) {
-            team = getDefaultTeam();
-        }
-        user.setTeam(team);
+        Team targetTeam = team == null ? getDefaultTeam() : team;
+        user.setTeam(targetTeam);
+        user.setTenant(resolveTenantForNewUser(targetTeam));
         userRepository.save(user);
         databaseService.exportDatabase();
     }
@@ -389,6 +414,21 @@ public class UserService implements UserServiceInterface {
         return teamRepository
                 .findByIdForTenant(teamId, currentTenantId())
                 .orElseThrow(() -> new IllegalArgumentException("Invalid team ID: " + teamId));
+    }
+
+    private Tenant resolveTenantForNewUser(Team team) {
+        if (team != null && team.getTenant() != null) {
+            return team.getTenant();
+        }
+
+        Long tenantId = currentTenantId();
+        if (tenantId != null) {
+            return tenantService
+                    .findById(tenantId)
+                    .orElseGet(tenantService::getOrCreateDefaultTenant);
+        }
+
+        return tenantService.getOrCreateDefaultTenant();
     }
 
     /**
@@ -460,12 +500,9 @@ public class UserService implements UserServiceInterface {
         }
         user.addAuthority(new Authority(role, user));
 
-        // Resolve and set team
-        if (team != null) {
-            user.setTeam(team);
-        } else {
-            user.setTeam(resolveTeam(teamId, this::getDefaultTeam));
-        }
+        Team resolvedTeam = team != null ? team : resolveTeam(teamId, this::getDefaultTeam);
+        user.setTeam(resolvedTeam);
+        user.setTenant(resolveTenantForNewUser(resolvedTeam));
 
         // Save user
         userRepository.save(user);
@@ -585,6 +622,7 @@ public class UserService implements UserServiceInterface {
                     user.setAuthenticationType(AuthenticationType.WEB);
                     user.setApiKey(customApiKey);
                     user.addAuthority(new Authority(Role.INTERNAL_API_USER.getRoleId(), user));
+                    user.setTenant(resolveTenantForNewUser(null));
                     userRepository.save(user);
                 });
 
@@ -596,9 +634,11 @@ public class UserService implements UserServiceInterface {
     }
 
     public long getTotalUsersCount() {
-        // Count all users in the database
-        long userCount = userRepository.count();
-        // Exclude the internal API user from the count
+        Long tenantId = currentTenantId();
+        long userCount =
+                tenantId == null
+                        ? userRepository.count()
+                        : userRepository.countByTenantId(tenantId);
         if (findByUsernameIgnoreCase(Role.INTERNAL_API_USER.getRoleId()).isPresent()) {
             userCount -= 1;
         }
@@ -606,7 +646,11 @@ public class UserService implements UserServiceInterface {
     }
 
     public List<User> getUsersWithoutTeam() {
-        return userRepository.findAllWithoutTeam();
+        Long tenantId = currentTenantId();
+        if (tenantId == null) {
+            return userRepository.findAllWithoutTeam();
+        }
+        return userRepository.findAllWithoutTeamForTenant(tenantId);
     }
 
     public void saveAll(List<User> users) {

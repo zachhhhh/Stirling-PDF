@@ -2,101 +2,83 @@ package stirling.software.common.util;
 
 import java.io.File;
 import java.io.IOException;
+import java.io.InputStream;
+import java.io.OutputStream;
 import java.nio.file.Files;
 import java.nio.file.Path;
+import java.nio.file.StandardOpenOption;
 import java.time.Duration;
 import java.util.Set;
 import java.util.UUID;
 
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
+import org.springframework.util.StringUtils;
 import org.springframework.web.multipart.MultipartFile;
 
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 
 import stirling.software.common.model.ApplicationProperties;
+import stirling.software.common.tenant.TenantContextSupplier;
+import stirling.software.common.tenant.TenantContextSupplier.TenantDescriptor;
 
 /**
  * Service for managing temporary files in Stirling-PDF. Provides methods for creating, tracking,
- * and cleaning up temporary files.
+ * and cleaning up temporary files. When multi-tenancy is enabled, files are partitioned by tenant
+ * to prevent cross-tenant disclosure.
  */
 @Slf4j
 @Service
 @RequiredArgsConstructor
 public class TempFileManager {
 
+    private static final String DEFAULT_PREFIX = "stirling-pdf-";
+
     private final TempFileRegistry registry;
     private final ApplicationProperties applicationProperties;
+    private TenantContextSupplier tenantContextSupplier;
 
-    /**
-     * Create a temporary file with the Stirling-PDF prefix. The file is automatically registered
-     * with the registry.
-     *
-     * @param suffix The suffix for the temporary file
-     * @return The created temporary file
-     * @throws IOException If an I/O error occurs
-     */
-    public File createTempFile(String suffix) throws IOException {
-        ApplicationProperties.TempFileManagement tempFiles =
-                applicationProperties.getSystem().getTempFileManagement();
-        Path tempFilePath;
-        String customTempDirectory = tempFiles.getBaseTmpDir();
-        if (customTempDirectory != null && !customTempDirectory.isEmpty()) {
-            Path tempDir = Path.of(customTempDirectory);
-            if (!Files.exists(tempDir)) {
-                Files.createDirectories(tempDir);
-            }
-            tempFilePath = Files.createTempFile(tempDir, tempFiles.getPrefix(), suffix);
-        } else {
-            tempFilePath = Files.createTempFile(tempFiles.getPrefix(), suffix);
-        }
-        File tempFile = tempFilePath.toFile();
-        return registry.register(tempFile);
+    @Autowired(required = false)
+    void setTenantContextSupplier(TenantContextSupplier tenantContextSupplier) {
+        this.tenantContextSupplier = tenantContextSupplier;
     }
 
     /**
-     * Create a temporary directory with the Stirling-PDF prefix. The directory is automatically
-     * registered with the registry.
-     *
-     * @return The created temporary directory
-     * @throws IOException If an I/O error occurs
+     * Create a temporary file with the configured prefix. The file is automatically registered with
+     * the registry and stored under a tenant-specific directory when multi-tenancy is active.
      */
+    public File createTempFile(String suffix) throws IOException {
+        Path baseDir = resolveTenantAwareBase();
+        Path tempFilePath = Files.createTempFile(baseDir, prefix(), suffix);
+        return registry.register(tempFilePath.toFile());
+    }
+
+    /** Create a temporary directory under the tenant-scoped root. */
     public Path createTempDirectory() throws IOException {
-        ApplicationProperties.TempFileManagement tempFiles =
-                applicationProperties.getSystem().getTempFileManagement();
-        Path tempDirPath;
-        String customTempDirectory = tempFiles.getBaseTmpDir();
-        if (customTempDirectory != null && !customTempDirectory.isEmpty()) {
-            Path tempDir = Path.of(customTempDirectory);
-            if (!Files.exists(tempDir)) {
-                Files.createDirectories(tempDir);
-            }
-            tempDirPath = Files.createTempDirectory(tempDir, tempFiles.getPrefix());
-        } else {
-            tempDirPath = Files.createTempDirectory(tempFiles.getPrefix());
-        }
+        Path baseDir = resolveTenantAwareBase();
+        Path tempDirPath = Files.createTempDirectory(baseDir, prefix());
         return registry.registerDirectory(tempDirPath);
     }
 
-    /**
-     * Convert a MultipartFile to a temporary File and register it. This is a wrapper around
-     * GeneralUtils.convertMultipartFileToFile that ensures the created temp file is registered.
-     *
-     * @param multipartFile The MultipartFile to convert
-     * @return The created temporary file
-     * @throws IOException If an I/O error occurs
-     */
+    /** Convert an uploaded file into a tenant-scoped temp file. */
     public File convertMultipartFileToFile(MultipartFile multipartFile) throws IOException {
-        File tempFile = GeneralUtils.convertMultipartFileToFile(multipartFile);
-        return registry.register(tempFile);
+        if (multipartFile == null) {
+            throw new IllegalArgumentException("Multipart file cannot be null");
+        }
+        if (multipartFile.isEmpty()) {
+            throw new IllegalArgumentException("Multipart file cannot be empty");
+        }
+
+        File tempFile = createTempFile(determineSuffix(multipartFile.getOriginalFilename()));
+        try (InputStream inputStream = multipartFile.getInputStream();
+                OutputStream outputStream =
+                        Files.newOutputStream(tempFile.toPath(), StandardOpenOption.WRITE)) {
+            inputStream.transferTo(outputStream);
+        }
+        return tempFile;
     }
 
-    /**
-     * Delete a temporary file and unregister it from the registry.
-     *
-     * @param file The file to delete
-     * @return true if the file was deleted successfully, false otherwise
-     */
     public boolean deleteTempFile(File file) {
         if (file != null && file.exists()) {
             boolean deleted = file.delete();
@@ -111,53 +93,36 @@ public class TempFileManager {
         return false;
     }
 
-    /**
-     * Delete a temporary file and unregister it from the registry.
-     *
-     * @param path The path to delete
-     * @return true if the file was deleted successfully, false otherwise
-     */
     public boolean deleteTempFile(Path path) {
         if (path != null) {
             try {
                 boolean deleted = Files.deleteIfExists(path);
                 if (deleted) {
                     registry.unregister(path);
-                    log.debug("Deleted temp file: {}", path.toString());
+                    log.debug("Deleted temp file: {}", path);
                 } else {
-                    log.debug("Temp file already deleted or does not exist: {}", path.toString());
+                    log.debug("Temp file already deleted or does not exist: {}", path);
                 }
                 return deleted;
             } catch (IOException e) {
-                log.warn("Failed to delete temp file: {}", path.toString(), e);
+                log.warn("Failed to delete temp file: {}", path, e);
                 return false;
             }
         }
         return false;
     }
 
-    /**
-     * Delete a temporary directory and all its contents.
-     *
-     * @param directory The directory to delete
-     */
     public void deleteTempDirectory(Path directory) {
         if (directory != null && Files.isDirectory(directory)) {
             try {
                 GeneralUtils.deleteDirectory(directory);
-                log.debug("Deleted temp directory: {}", directory.toString());
+                log.debug("Deleted temp directory: {}", directory);
             } catch (IOException e) {
-                log.warn("Failed to delete temp directory: {}", directory.toString(), e);
+                log.warn("Failed to delete temp directory: {}", directory, e);
             }
         }
     }
 
-    /**
-     * Register an existing file with the registry.
-     *
-     * @param file The file to register
-     * @return The same file for method chaining
-     */
     public File register(File file) {
         if (file != null && file.exists()) {
             return registry.register(file);
@@ -165,85 +130,111 @@ public class TempFileManager {
         return file;
     }
 
-    /**
-     * Clean up old temporary files based on age.
-     *
-     * @param maxAgeMillis Maximum age in milliseconds for temp files
-     * @return Number of files deleted
-     */
     public int cleanupOldTempFiles(long maxAgeMillis) {
         int deletedCount = 0;
-
-        // Get files older than max age
         Set<Path> oldFiles = registry.getFilesOlderThan(maxAgeMillis);
-
-        // Delete each old file
         for (Path file : oldFiles) {
             if (deleteTempFile(file)) {
                 deletedCount++;
             }
         }
-
-        log.info("Cleaned up {} old temporary files", deletedCount);
+        if (deletedCount > 0) {
+            log.info("Cleaned up {} old temporary files", deletedCount);
+        }
         return deletedCount;
     }
 
-    /**
-     * Get the maximum age for temporary files in milliseconds.
-     *
-     * @return Maximum age in milliseconds
-     */
     public long getMaxAgeMillis() {
         long maxAgeHours =
                 applicationProperties.getSystem().getTempFileManagement().getMaxAgeHours();
         return Duration.ofHours(maxAgeHours).toMillis();
     }
 
-    /**
-     * Generate a unique temporary file name with the Stirling-PDF prefix.
-     *
-     * @param type Type identifier for the temp file
-     * @param extension File extension (without the dot)
-     * @return A unique temporary file name
-     */
     public String generateTempFileName(String type, String extension) {
-        String tempFilePrefix =
-                applicationProperties.getSystem().getTempFileManagement().getPrefix();
         String uuid = UUID.randomUUID().toString().substring(0, 8);
-        return tempFilePrefix + type + "-" + uuid + "." + extension;
+        return prefix() + type + "-" + uuid + "." + extension;
     }
 
-    /**
-     * Register a known LibreOffice temporary directory. This is used when integrating with
-     * LibreOffice for file conversions.
-     *
-     * @return The LibreOffice temp directory
-     * @throws IOException If directory creation fails
-     */
     public Path registerLibreOfficeTempDir() throws IOException {
         ApplicationProperties.TempFileManagement tempFiles =
                 applicationProperties.getSystem().getTempFileManagement();
-        Path loTempDir;
+
         String libreOfficeTempDir = tempFiles.getLibreofficeDir();
-        String customTempDirectory = tempFiles.getBaseTmpDir();
-
-        // First check if explicitly configured
-        if (libreOfficeTempDir != null && !libreOfficeTempDir.isEmpty()) {
-            loTempDir = Path.of(libreOfficeTempDir);
-        }
-        // Next check if we have a custom temp directory
-        else if (customTempDirectory != null && !customTempDirectory.isEmpty()) {
-            loTempDir = Path.of(customTempDirectory, "libreoffice");
-        }
-        // Fall back to system temp dir with our application prefix
-        else {
-            loTempDir = Path.of(System.getProperty("java.io.tmpdir"), "stirling-pdf-libreoffice");
+        if (StringUtils.hasText(libreOfficeTempDir)) {
+            Path configured = Path.of(libreOfficeTempDir);
+            Files.createDirectories(configured);
+            return registry.registerDirectory(configured);
         }
 
-        if (!Files.exists(loTempDir)) {
-            Files.createDirectories(loTempDir);
-        }
-
+        Path baseDir = resolveTenantAwareBase();
+        Path loTempDir = baseDir.resolve("libreoffice");
+        Files.createDirectories(loTempDir);
         return registry.registerDirectory(loTempDir);
+    }
+
+    private Path resolveTenantAwareBase() throws IOException {
+        ApplicationProperties.TempFileManagement tempFiles =
+                applicationProperties.getSystem().getTempFileManagement();
+        Path baseDir = resolveBaseDirectory(tempFiles);
+        String tenantSegment = currentTenantSegment();
+        if (tenantSegment != null) {
+            baseDir = baseDir.resolve("tenants").resolve(tenantSegment);
+        }
+        Files.createDirectories(baseDir);
+        return baseDir;
+    }
+
+    private Path resolveBaseDirectory(ApplicationProperties.TempFileManagement tempFiles)
+            throws IOException {
+        String customTempDirectory = tempFiles.getBaseTmpDir();
+        if (StringUtils.hasText(customTempDirectory)) {
+            Path tempDir = Path.of(customTempDirectory);
+            Files.createDirectories(tempDir);
+            return tempDir;
+        }
+        Path systemTemp = Path.of(System.getProperty("java.io.tmpdir"), sanitizeSegment(prefix()));
+        Files.createDirectories(systemTemp);
+        return systemTemp;
+    }
+
+    private String currentTenantSegment() {
+        if (tenantContextSupplier == null) {
+            return null;
+        }
+        return tenantContextSupplier
+                .currentTenant()
+                .map(TenantDescriptor::slug)
+                .filter(StringUtils::hasText)
+                .map(this::sanitizeSegment)
+                .orElse(null);
+    }
+
+    private String sanitizeSegment(String input) {
+        String normalized = input.replaceAll("[^a-zA-Z0-9-_]", "-");
+        if (normalized.length() > 80) {
+            normalized = normalized.substring(0, 80);
+        }
+        return normalized.isBlank() ? "default" : normalized;
+    }
+
+    private String determineSuffix(String originalFilename) {
+        if (!StringUtils.hasText(originalFilename)) {
+            return ".tmp";
+        }
+        int idx = originalFilename.lastIndexOf('.');
+        if (idx == -1 || idx == originalFilename.length() - 1) {
+            return ".tmp";
+        }
+        String suffix = originalFilename.substring(idx);
+        return suffix.length() > 12 ? suffix.substring(0, 12) : suffix;
+    }
+
+    private String prefix() {
+        String configuredPrefix =
+                applicationProperties.getSystem().getTempFileManagement().getPrefix();
+        if (!StringUtils.hasText(configuredPrefix)) {
+            return DEFAULT_PREFIX;
+        }
+        return configuredPrefix;
     }
 }

@@ -12,6 +12,7 @@ import stirling.software.common.model.ApplicationProperties;
 import stirling.software.proprietary.security.database.repository.UserRepository;
 import stirling.software.proprietary.security.model.AuthenticationType;
 import stirling.software.proprietary.security.model.User;
+import stirling.software.proprietary.tenant.TenantContext;
 
 @Service
 @RequiredArgsConstructor
@@ -25,9 +26,16 @@ public class CustomUserDetailsService implements UserDetailsService {
 
     @Override
     public UserDetails loadUserByUsername(String username) throws UsernameNotFoundException {
+        Long tenantId = null;
+        var descriptor = TenantContext.getTenant();
+        if (descriptor != null) {
+            tenantId = descriptor.id();
+        }
+
         User user =
-                userRepository
-                        .findByUsername(username)
+                (tenantId == null
+                                ? userRepository.findByUsername(username)
+                                : userRepository.findByUsernameAndTenantId(username, tenantId))
                         .orElseThrow(
                                 () ->
                                         new UsernameNotFoundException(

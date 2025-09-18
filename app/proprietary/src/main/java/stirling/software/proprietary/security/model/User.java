@@ -19,9 +19,15 @@ import lombok.ToString;
 
 import stirling.software.common.model.enumeration.Role;
 import stirling.software.proprietary.model.Team;
+import stirling.software.proprietary.model.Tenant;
 
 @Entity
-@Table(name = "users")
+@Table(
+        name = "users",
+        uniqueConstraints =
+                @UniqueConstraint(
+                        name = "uk_user_tenant_username",
+                        columnNames = {"tenant_id", "username"}))
 @NoArgsConstructor
 @Getter
 @Setter
@@ -36,7 +42,7 @@ public class User implements UserDetails, Serializable {
     @Column(name = "user_id")
     private Long id;
 
-    @Column(name = "username", unique = true)
+    @Column(name = "username", nullable = false)
     private String username;
 
     @Column(name = "password")
@@ -63,6 +69,10 @@ public class User implements UserDetails, Serializable {
     @ManyToOne(fetch = FetchType.EAGER)
     @JoinColumn(name = "team_id")
     private Team team;
+
+    @ManyToOne(fetch = FetchType.LAZY)
+    @JoinColumn(name = "tenant_id", nullable = false)
+    private Tenant tenant;
 
     @ElementCollection
     @MapKeyColumn(name = "setting_key")

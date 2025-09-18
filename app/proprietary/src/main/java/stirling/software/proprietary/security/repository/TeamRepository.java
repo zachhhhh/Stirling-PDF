@@ -40,4 +40,9 @@ public interface TeamRepository extends JpaRepository<Team, Long> {
     List<TeamWithUserCountDTO> findAllTeamsWithUserCountForTenant(@Param("tenantId") Long tenantId);
 
     List<Team> findByTenantIsNull();
+
+    @Query(
+            "SELECT t FROM Team t WHERE (:tenantId IS NULL AND t.tenant IS NULL)"
+                    + " OR t.tenant.id = :tenantId")
+    List<Team> findAllForTenant(@Param("tenantId") Long tenantId);
 }

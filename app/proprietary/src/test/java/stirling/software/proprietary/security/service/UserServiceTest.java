@@ -20,12 +20,14 @@ import org.springframework.security.crypto.password.PasswordEncoder;
 import stirling.software.common.model.ApplicationProperties;
 import stirling.software.common.model.enumeration.Role;
 import stirling.software.proprietary.model.Team;
+import stirling.software.proprietary.model.Tenant;
 import stirling.software.proprietary.security.database.repository.AuthorityRepository;
 import stirling.software.proprietary.security.database.repository.UserRepository;
 import stirling.software.proprietary.security.model.AuthenticationType;
 import stirling.software.proprietary.security.model.User;
 import stirling.software.proprietary.security.repository.TeamRepository;
 import stirling.software.proprietary.security.session.SessionPersistentRegistry;
+import stirling.software.proprietary.service.TenantService;
 
 @ExtendWith(MockitoExtension.class)
 class UserServiceTest {
@@ -34,6 +36,7 @@ class UserServiceTest {
 
     @Mock private TeamRepository teamRepository;
     @Mock private TeamService teamService;
+    @Mock private TenantService tenantService;
 
     @Mock private AuthorityRepository authorityRepository;
 
@@ -50,18 +53,26 @@ class UserServiceTest {
     @InjectMocks private UserService userService;
 
     private Team mockTeam;
+    private Tenant mockTenant;
     private User mockUser;
 
     @BeforeEach
     void setUp() {
+        mockTenant = new Tenant();
+        mockTenant.setId(10L);
+        mockTenant.setSlug("default");
+
         mockTeam = new Team();
         mockTeam.setId(1L);
         mockTeam.setName("Test Team");
+        mockTeam.setTenant(mockTenant);
 
         mockUser = new User();
         mockUser.setId(1L);
         mockUser.setUsername("testuser");
         mockUser.setEnabled(true);
+
+        lenient().when(tenantService.getOrCreateDefaultTenant()).thenReturn(mockTenant);
     }
 
     @Test

@@ -3,13 +3,13 @@ package stirling.software.proprietary.security.configuration;
 import javax.sql.DataSource;
 
 import org.springframework.beans.factory.annotation.Qualifier;
-import org.springframework.boot.autoconfigure.condition.ConditionalOnBooleanProperty;
 import org.springframework.boot.autoconfigure.domain.EntityScan;
 import org.springframework.boot.jdbc.DataSourceBuilder;
 import org.springframework.boot.jdbc.DatabaseDriver;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.context.annotation.Primary;
+import org.springframework.core.env.Environment;
 import org.springframework.data.jpa.repository.config.EnableJpaRepositories;
 
 import lombok.Getter;
@@ -37,10 +37,12 @@ public class DatabaseConfig {
 
     private final ApplicationProperties.Datasource datasource;
     private final boolean runningProOrHigher;
+    private final Environment environment;
 
     public DatabaseConfig(
             ApplicationProperties.Datasource datasource,
-            @Qualifier("runningProOrHigher") boolean runningProOrHigher) {
+            @Qualifier("runningProOrHigher") boolean runningProOrHigher,
+            Environment environment) {
         DATASOURCE_DEFAULT_URL =
                 "jdbc:h2:file:"
                         + InstallationPathConfig.getConfigPath()
@@ -48,6 +50,7 @@ public class DatabaseConfig {
         log.debug("Database URL: {}", DATASOURCE_DEFAULT_URL);
         this.datasource = datasource;
         this.runningProOrHigher = runningProOrHigher;
+        this.environment = environment;
     }
 
     /**
@@ -63,6 +66,11 @@ public class DatabaseConfig {
     @Primary
     public DataSource dataSource() throws UnsupportedProviderException {
         DataSourceBuilder<?> dataSourceBuilder = DataSourceBuilder.create();
+
+        DataSource environmentDataSource = dataSourceFromEnvironment(dataSourceBuilder);
+        if (environmentDataSource != null) {
+            return environmentDataSource;
+        }
 
         if (!runningProOrHigher || !datasource.isEnableCustomDatabase()) {
             return useDefaultDataSource(dataSourceBuilder);
@@ -82,7 +90,6 @@ public class DatabaseConfig {
         return dataSourceBuilder.build();
     }
 
-    @ConditionalOnBooleanProperty(name = "premium.enabled")
     private DataSource useCustomDataSource(DataSourceBuilder<?> dataSourceBuilder)
             throws UnsupportedProviderException {
         log.info("Using custom database configuration");
@@ -153,5 +160,52 @@ public class DatabaseConfig {
             log.warn("Unknown driver: {}", driverName);
             throw new UnsupportedProviderException(driverName + " is not currently supported");
         }
+    }
+
+    private DataSource dataSourceFromEnvironment(DataSourceBuilder<?> builder) {
+        String url =
+                firstNonBlank(
+                        environment.getProperty("spring.datasource.url"),
+                        environment.getProperty("SPRING_DATASOURCE_URL"));
+        if (url == null || url.isBlank()) {
+            return null;
+        }
+
+        String username =
+                firstNonBlank(
+                        environment.getProperty("spring.datasource.username"),
+                        environment.getProperty("SPRING_DATASOURCE_USERNAME"));
+        String password =
+                firstNonBlank(
+                        environment.getProperty("spring.datasource.password"),
+                        environment.getProperty("SPRING_DATASOURCE_PASSWORD"));
+
+        DatabaseDriver driver = DatabaseDriver.fromJdbcUrl(url);
+        if (driver == DatabaseDriver.UNKNOWN) {
+            log.warn("Unable to determine JDBC driver for {}. Falling back to H2 driver.", url);
+            builder.driverClassName(DatabaseDriver.H2.getDriverClassName());
+        } else {
+            builder.driverClassName(driver.getDriverClassName());
+        }
+
+        log.info("Using datasource defined via SPRING_DATASOURCE_URL environment variables");
+        builder.url(url);
+        if (username != null) {
+            builder.username(username);
+        }
+        if (password != null) {
+            builder.password(password);
+        }
+        return builder.build();
+    }
+
+    private String firstNonBlank(String primary, String fallback) {
+        if (primary != null && !primary.isBlank()) {
+            return primary;
+        }
+        if (fallback != null && !fallback.isBlank()) {
+            return fallback;
+        }
+        return null;
     }
 }

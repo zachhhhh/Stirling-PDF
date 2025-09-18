@@ -22,6 +22,7 @@ public class TenantService {
 
     private final TenantRepository tenantRepository;
     private final ApplicationProperties applicationProperties;
+    private final PlanService planService;
 
     @Transactional(readOnly = true)
     public Optional<Tenant> findBySlug(String slug) {
@@ -31,6 +32,16 @@ public class TenantService {
     @Transactional(readOnly = true)
     public Optional<Tenant> findById(Long tenantId) {
         return tenantRepository.findById(tenantId);
+    }
+
+    @Transactional(readOnly = true)
+    public Tenant findByBillingCustomerId(String billingCustomerId) {
+        return tenantRepository.findByBillingCustomerId(billingCustomerId).orElse(null);
+    }
+
+    @Transactional
+    public Tenant save(Tenant tenant) {
+        return tenantRepository.save(tenant);
     }
 
     @Transactional(readOnly = true)
@@ -64,6 +75,7 @@ public class TenantService {
                                                     applicationProperties
                                                             .getSaas()
                                                             .getTrialPeriod()));
+                            planService.applyPlanDefaults(tenant);
                             return tenantRepository.save(tenant);
                         });
     }
@@ -78,6 +90,7 @@ public class TenantService {
                             tenant.setSlug(normalizeSlug(slug));
                             tenant.setDisplayName(displayName);
                             tenant.setPlan(plan);
+                            planService.applyPlanDefaults(tenant);
                             return tenantRepository.save(tenant);
                         });
     }
@@ -108,6 +121,7 @@ public class TenantService {
         tenant.setActive(active == null ? true : active);
         tenant.setBillingCustomerId(billingCustomerId);
         tenant.setBillingSubscriptionId(billingSubscriptionId);
+        planService.applyPlanDefaults(tenant);
         return tenantRepository.save(tenant);
     }
 
@@ -147,6 +161,8 @@ public class TenantService {
         if (plan != null && !plan.isBlank()) {
             tenant.setPlan(resolvePlan(plan));
         }
+
+        planService.applyPlanDefaults(tenant);
 
         if (monthlyLimit != null) {
             tenant.setMonthlyOperationLimit(monthlyLimit);

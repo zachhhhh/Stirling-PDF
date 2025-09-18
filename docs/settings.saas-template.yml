@@ -1,0 +1,40 @@
+# Example SaaS settings overlay
+saas:
+  enabled: true
+  domain: "yourdomain.com"          # e.g. tenant.yourdomain.com
+  tenant-header: "X-Tenant-Slug"     # optional header fallback
+  default-tenant-slug: "default"
+  default-plan: "FREE"
+  default-monthly-operation-limit: 1000
+  default-storage-limit-mb: 2048
+  trial-period: "P14D"               # ISO-8601 duration
+
+billing:
+  stripe:
+    secret-key: "sk_live_xxx"
+    publishable-key: "pk_live_xxx"
+    webhook-secret: "whsec_xxx"
+  plans:
+    FREE:
+      price-id: price_free
+    PRO:
+      price-id: price_pro
+      requires-payment-method: true
+      allow-trial: true
+      monthly-operation-limit: 5000
+      storage-limit-mb: 10240
+
+mail:
+  enabled: true
+  from: "noreply@yourdomain.com"
+  from-name: "Stirling-PDF"
+  resend-api-key: "re_live_xxx"
+  verification-base-url: "https://app.yourdomain.com/public/signup"
+
+system:
+  temp-file-management:
+    base-tmp-dir: "/var/stirling/tmp"
+
+logging:
+  file:
+    name: "logs/stirling-pdf.log"
