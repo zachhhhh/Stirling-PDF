@@ -15,6 +15,8 @@ import com.stripe.model.checkout.Session;
 import com.stripe.net.Webhook;
 import com.stripe.param.checkout.SessionCreateParams;
 
+import jakarta.annotation.PostConstruct;
+
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 
@@ -29,6 +31,17 @@ import stirling.software.proprietary.service.TenantService;
 @Service
 @RequiredArgsConstructor
 public class StripeBillingService {
+
+    @PostConstruct
+    public void initStripe() {
+        log.info("StripeBillingService initialized - checking Stripe config");
+        try {
+            stripeConfig();
+            log.info("Stripe config loaded successfully");
+        } catch (Exception e) {
+            log.error("Error initializing Stripe: {}", e.getMessage(), e);
+        }
+    }
 
     private final PlanService planService;
     private final TenantService tenantService;

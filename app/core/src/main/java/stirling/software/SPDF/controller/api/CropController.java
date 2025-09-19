@@ -10,6 +10,7 @@ import org.apache.pdfbox.pdmodel.PDPageContentStream;
 import org.apache.pdfbox.pdmodel.PDPageContentStream.AppendMode;
 import org.apache.pdfbox.pdmodel.common.PDRectangle;
 import org.apache.pdfbox.pdmodel.graphics.form.PDFormXObject;
+import org.apache.pdfbox.util.Matrix;
 import org.springframework.http.MediaType;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.ModelAttribute;
@@ -62,27 +63,33 @@ public class CropController {
             // Import the source page as a form XObject
             PDFormXObject formXObject = layerUtility.importPageAsForm(sourceDocument, i);
 
+            float cropX = request.getX();
+            float cropY = request.getY();
+            float cropWidth = request.getWidth();
+            float cropHeight = request.getHeight();
+
+            if (cropWidth <= 0 || cropHeight <= 0) {
+                contentStream.close();
+                continue;
+            }
+
             contentStream.saveGraphicsState();
 
-            // Define the crop area
-            contentStream.addRect(
-                    request.getX(), request.getY(), request.getWidth(), request.getHeight());
+            // Ensure only the selected area is rendered on the new page
+            contentStream.addRect(0, 0, cropWidth, cropHeight);
             contentStream.clip();
 
-            // Draw the entire formXObject
+            // Translate so the cropped area maps into the new page origin
+            contentStream.transform(Matrix.getTranslateInstance(-cropX, -cropY));
             contentStream.drawForm(formXObject);
 
             contentStream.restoreGraphicsState();
-
             contentStream.close();
 
-            // Now, set the new page's media box to the cropped size
-            newPage.setMediaBox(
-                    new PDRectangle(
-                            request.getX(),
-                            request.getY(),
-                            request.getWidth(),
-                            request.getHeight()));
+            PDRectangle cropRectangle = new PDRectangle(0, 0, cropWidth, cropHeight);
+            newPage.setMediaBox(cropRectangle);
+            newPage.setCropBox(cropRectangle);
+            newPage.setTrimBox(cropRectangle);
         }
 
         ByteArrayOutputStream baos = new ByteArrayOutputStream();

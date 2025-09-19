@@ -27,8 +27,14 @@ public class TenantBootstrap {
 
     @PostConstruct
     public void hydrateTenants() {
+        log.info("TenantBootstrap starting hydrateTenants");
         Tenant defaultTenant = tenantService.getOrCreateDefaultTenant();
+        log.info(
+                "TenantBootstrap obtained default tenant: id={}, slug={}",
+                defaultTenant.getId(),
+                defaultTenant.getSlug());
         List<Team> teamsWithoutTenant = teamRepository.findByTenantIsNull();
+        log.info("TenantBootstrap teamsWithoutTenant size={}", teamsWithoutTenant.size());
         if (!teamsWithoutTenant.isEmpty()) {
             teamsWithoutTenant.forEach(team -> team.setTenant(defaultTenant));
             teamRepository.saveAll(teamsWithoutTenant);
@@ -40,6 +46,7 @@ public class TenantBootstrap {
         }
 
         List<User> usersWithoutTenant = userRepository.findByTenantIsNull();
+        log.info("TenantBootstrap usersWithoutTenant size={}", usersWithoutTenant.size());
         if (usersWithoutTenant.isEmpty()) {
             return;
         }

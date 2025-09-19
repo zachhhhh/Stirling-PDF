@@ -1,6 +1,7 @@
 package stirling.software.proprietary.web;
 
 import java.io.IOException;
+import java.util.Locale;
 import java.util.Map;
 
 import org.slf4j.MDC;
@@ -71,10 +72,17 @@ public class AuditWebFilter extends OncePerRequestFilter {
             }
 
             // Store query parameters (without values for privacy)
-            Map<String, String[]> parameterMap = request.getParameterMap();
-            if (parameterMap != null && !parameterMap.isEmpty()) {
-                String params = String.join(",", parameterMap.keySet());
-                MDC.put("queryParams", params);
+            String contentTypeLower =
+                    request.getContentType() == null
+                            ? null
+                            : request.getContentType().toLowerCase(Locale.ROOT);
+
+            if (contentTypeLower == null || !contentTypeLower.startsWith("multipart/")) {
+                Map<String, String[]> parameterMap = request.getParameterMap();
+                if (parameterMap != null && !parameterMap.isEmpty()) {
+                    String params = String.join(",", parameterMap.keySet());
+                    MDC.put("queryParams", params);
+                }
             }
 
             // Continue with the filter chain

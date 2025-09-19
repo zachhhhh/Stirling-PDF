@@ -11,9 +11,11 @@ import jakarta.servlet.http.HttpServletRequest;
 import jakarta.servlet.http.HttpServletResponse;
 
 import lombok.RequiredArgsConstructor;
+import lombok.extern.slf4j.Slf4j;
 
 import stirling.software.proprietary.model.Tenant;
 
+@Slf4j
 @Component
 @RequiredArgsConstructor
 public class TenantContextFilter extends OncePerRequestFilter {
@@ -26,6 +28,10 @@ public class TenantContextFilter extends OncePerRequestFilter {
             throws ServletException, IOException {
         Tenant tenant = tenantResolver.resolveTenant(request);
         if (tenant != null) {
+            log.trace(
+                    "Tenant resolved for request {} -> {}",
+                    request.getRequestURI(),
+                    tenant.getSlug());
             TenantContext.setTenant(
                     new TenantContext.TenantDescriptor(
                             tenant.getId(),
@@ -34,6 +40,8 @@ public class TenantContextFilter extends OncePerRequestFilter {
                             tenant.getMonthlyOperationLimit(),
                             tenant.getStorageLimitMb()));
             response.setHeader("X-Tenant-Resolved", tenant.getSlug());
+        } else {
+            log.trace("No tenant resolved for request {}", request.getRequestURI());
         }
 
         try {

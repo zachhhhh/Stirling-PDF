@@ -44,7 +44,7 @@ If you deploy the app via Docker Compose or Kubernetes, inject these values as e
 With the environment set, start the application once so Flyway applies `V2025_02_20_01__signup_tables.sql`.
 
 ```bash
-SPRING_PROFILES_ACTIVE=prod \
+SPRING_PROFILES_ACTIVE="prod,security" \
 JAVA_HOME=/path/to/jdk17 \
 ./gradlew :common:bootRun
 ```

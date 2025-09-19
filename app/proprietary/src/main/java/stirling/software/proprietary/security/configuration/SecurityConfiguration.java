@@ -29,6 +29,8 @@ import org.springframework.security.web.csrf.CsrfTokenRequestAttributeHandler;
 import org.springframework.security.web.savedrequest.NullRequestCache;
 import org.springframework.security.web.servlet.util.matcher.PathPatternRequestMatcher;
 
+import jakarta.annotation.PostConstruct;
+
 import lombok.extern.slf4j.Slf4j;
 
 import stirling.software.common.configuration.AppConfig;
@@ -120,6 +122,12 @@ public class SecurityConfiguration {
         this.oAuth2userAuthoritiesMapper = oAuth2userAuthoritiesMapper;
         this.saml2RelyingPartyRegistrations = saml2RelyingPartyRegistrations;
         this.saml2AuthenticationRequestResolver = saml2AuthenticationRequestResolver;
+        log.info("SecurityConfiguration constructor completed - all dependencies loaded");
+    }
+
+    @PostConstruct
+    public void initSecurity() {
+        log.info("SecurityConfiguration initialized after Flyway - checking bean dependencies");
     }
 
     @Bean
@@ -129,6 +137,11 @@ public class SecurityConfiguration {
 
     @Bean
     public SecurityFilterChain filterChain(HttpSecurity http) throws Exception {
+        boolean v2Enabled = appConfig.v2Enabled();
+        log.info(
+                "SecurityFilterChain setup started. loginEnabled={}, v2Enabled={}",
+                loginEnabledValue,
+                v2Enabled);
         http.addFilterBefore(tenantContextFilter, UsernamePasswordAuthenticationFilter.class);
 
         if (securityProperties.getCsrfDisabled() || !loginEnabledValue) {
@@ -136,8 +149,6 @@ public class SecurityConfiguration {
         }
 
         if (loginEnabledValue) {
-            boolean v2Enabled = appConfig.v2Enabled();
-
             if (v2Enabled) {
                 http.addFilterBefore(
                                 jwtAuthenticationFilter(),
@@ -346,7 +357,12 @@ public class SecurityConfiguration {
             log.debug("Login is not enabled.");
             http.authorizeHttpRequests(authz -> authz.anyRequest().permitAll());
         }
-        return http.build();
+        SecurityFilterChain chain = http.build();
+        log.info(
+                "SecurityFilterChain built successfully. loginEnabled={}, v2Enabled={}",
+                loginEnabledValue,
+                v2Enabled);
+        return chain;
     }
 
     public DaoAuthenticationProvider daoAuthenticationProvider() {

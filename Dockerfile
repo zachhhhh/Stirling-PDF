@@ -35,8 +35,9 @@ LABEL org.opencontainers.image.version="${VERSION_TAG}"
 LABEL org.opencontainers.image.keywords="PDF, manipulation, merge, split, convert, OCR, watermark"
 
 # Set Environment Variables
-ENV DISABLE_ADDITIONAL_FEATURES=true \
+ENV DISABLE_ADDITIONAL_FEATURES=false \
     VERSION_TAG=$VERSION_TAG \
+    JAVA_HOME=/usr/lib/jvm/java-21-openjdk \
     JAVA_BASE_OPTS="-XX:+UnlockExperimentalVMOptions -XX:MaxRAMPercentage=75 -XX:InitiatingHeapOccupancyPercent=20 -XX:+G1PeriodicGCInvokesConcurrent -XX:G1PeriodicGCInterval=10000 -XX:+UseStringDeduplication -XX:G1PeriodicGCSystemLoadThreshold=70" \
     JAVA_CUSTOM_OPTS="" \
     HOME=/home/stirlingpdfuser \
@@ -46,7 +47,7 @@ ENV DISABLE_ADDITIONAL_FEATURES=true \
     PYTHONPATH=/usr/lib/libreoffice/program:/opt/venv/lib/python3.12/site-packages \
     UNO_PATH=/usr/lib/libreoffice/program \
     URE_BOOTSTRAP=file:///usr/lib/libreoffice/program/fundamentalrc \
-    PATH=$PATH:/opt/venv/bin \
+    PATH=$PATH:/opt/venv/bin:/usr/lib/jvm/java-21-openjdk/bin \
     STIRLING_TEMPFILES_DIRECTORY=/tmp/stirling-pdf \
     TMPDIR=/tmp/stirling-pdf \
     TEMP=/tmp/stirling-pdf \
@@ -68,7 +69,7 @@ RUN echo "@main https://dl-cdn.alpinelinux.org/alpine/edge/main" | tee -a /etc/a
     su-exec \
     openssl \
     openssl-dev \
-    openjdk21-jre \
+    openjdk21 \
     # Doc conversion
     gcompat \
     libc6-compat \
@@ -91,6 +92,7 @@ RUN echo "@main https://dl-cdn.alpinelinux.org/alpine/edge/main" | tee -a /etc/a
     py3-pdf2image@testing \
     # URW Base 35 fonts for better PDF rendering
     font-urw-base35 && \
+    ln -s /usr/lib/jvm/java-21-openjdk /opt/java && \
     python3 -m venv /opt/venv && \
     /opt/venv/bin/pip install --no-cache-dir --upgrade pip setuptools && \
     /opt/venv/bin/pip install --no-cache-dir --upgrade unoserver weasyprint && \

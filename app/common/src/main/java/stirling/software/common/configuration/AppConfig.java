@@ -248,25 +248,25 @@ public class AppConfig {
     }
 
     @Bean(name = "runningProOrHigher")
-    @Profile("default")
+    @Profile({"default", "prod", "docker", "dev"})
     public boolean runningProOrHigher() {
         return false;
     }
 
     @Bean(name = "runningEE")
-    @Profile("default")
+    @Profile({"default", "prod", "docker", "dev"})
     public boolean runningEnterprise() {
         return false;
     }
 
     @Bean(name = "GoogleDriveEnabled")
-    @Profile("default")
+    @Profile({"default", "prod", "docker", "dev"})
     public boolean googleDriveEnabled() {
         return false;
     }
 
     @Bean(name = "license")
-    @Profile("default")
+    @Profile({"default", "prod", "docker", "dev"})
     public String licenseType() {
         return "NORMAL";
     }

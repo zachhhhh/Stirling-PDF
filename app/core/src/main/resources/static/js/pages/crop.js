@@ -2,7 +2,6 @@ let pdfCanvas = document.getElementById('cropPdfCanvas');
 let overlayCanvas = document.getElementById('overlayCanvas');
 let canvasesContainer = document.getElementById('canvasesContainer');
 canvasesContainer.style.display = 'none';
-let containerRect = canvasesContainer.getBoundingClientRect();
 
 let context = pdfCanvas.getContext('2d');
 let overlayContext = overlayCanvas.getContext('2d');
@@ -82,12 +81,12 @@ fileInput.addEventListener('change', function (e) {
 });
 
 cropForm.addEventListener('submit', function (e) {
-  if (xInput.value == '' && yInput.value == '' && widthInput.value == '' && heightInput.value == '') {
-    // Ορίστε συντεταγμένες για ολόκληρη την επιφάνεια του PDF
+  if ((xInput.value === '' || yInput.value === '' || widthInput.value === '' || heightInput.value === '') ||
+      (Number(widthInput.value) === 0 || Number(heightInput.value) === 0)) {
     xInput.value = 0;
     yInput.value = 0;
-    widthInput.value = containerRect.width;
-    heightInput.value = containerRect.height;
+    widthInput.value = pdfCanvas.width / pageScale;
+    heightInput.value = pdfCanvas.height / pageScale;
   }
 });
 
@@ -106,30 +105,43 @@ overlayCanvas.addEventListener('mousedown', function (e) {
 
 overlayCanvas.addEventListener('mousemove', function (e) {
   if (!isDrawing) return;
-  overlayContext.clearRect(0, 0, overlayCanvas.width, overlayCanvas.height); // Clear previous rectangle
+  overlayContext.clearRect(0, 0, overlayCanvas.width, overlayCanvas.height);
 
-  rectWidth = e.offsetX - startX;
-  rectHeight = e.offsetY - startY;
+  const currentX = e.offsetX;
+  const currentY = e.offsetY;
+  const minX = Math.min(startX, currentX);
+  const minY = Math.min(startY, currentY);
+  const width = Math.abs(currentX - startX);
+  const height = Math.abs(currentY - startY);
+
   overlayContext.strokeStyle = 'red';
-  overlayContext.strokeRect(startX, startY, rectWidth, rectHeight);
+  overlayContext.strokeRect(minX, minY, width, height);
 });
 
 overlayCanvas.addEventListener('mouseup', function (e) {
   isDrawing = false;
 
-  rectWidth = e.offsetX - startX;
-  rectHeight = e.offsetY - startY;
+  const endX = e.offsetX;
+  const endY = e.offsetY;
 
-  let flippedY = pdfCanvas.height - e.offsetY;
+  const minX = Math.min(startX, endX);
+  const maxX = Math.max(startX, endX);
+  const minY = Math.min(startY, endY);
+  const maxY = Math.max(startY, endY);
 
-  xInput.value = startX / pageScale;
-  yInput.value = flippedY / pageScale;
+  rectWidth = maxX - minX;
+  rectHeight = maxY - minY;
+
+  const canvasHeight = pdfCanvas.height;
+
+  xInput.value = minX / pageScale;
+  yInput.value = (canvasHeight - maxY) / pageScale;
   widthInput.value = rectWidth / pageScale;
   heightInput.value = rectHeight / pageScale;
 
   // Draw the final rectangle on the main canvas
   context.strokeStyle = 'red';
-  context.strokeRect(startX, startY, rectWidth, rectHeight);
+  context.strokeRect(minX, minY, rectWidth, rectHeight);
 
   overlayContext.clearRect(0, 0, overlayCanvas.width, overlayCanvas.height); // Clear the overlay
 });

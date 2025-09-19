@@ -8,16 +8,28 @@ import java.util.Map;
 import org.springframework.stereotype.Service;
 
 import lombok.RequiredArgsConstructor;
+import lombok.extern.slf4j.Slf4j;
 
 import stirling.software.common.model.ApplicationProperties;
 import stirling.software.proprietary.model.Tenant;
 import stirling.software.proprietary.model.TenantPlan;
 
+@Slf4j
 @Service
 @RequiredArgsConstructor
 public class PlanService {
 
     private final ApplicationProperties applicationProperties;
+
+    @jakarta.annotation.PostConstruct
+    void logPlanServiceInit() {
+        ApplicationProperties.Billing billing = applicationProperties.getBilling();
+        boolean hasStripe = billing != null && billing.getStripe() != null;
+        log.info(
+                "PlanService initialised. Billing plans configured: {}. Stripe config present: {}",
+                billing != null && billing.getPlans() != null,
+                hasStripe);
+    }
 
     public PlanDefinition getPlanDefinition(TenantPlan plan) {
         if (plan == null) {
