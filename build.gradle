@@ -120,6 +120,9 @@ subprojects {
         imports {
             mavenBom "org.springframework.boot:spring-boot-dependencies:$springBootVersion"
         }
+        dependencies {
+            dependency 'org.flywaydb:flyway-core:11.0.0'
+        }
     }
 
     dependencies {
